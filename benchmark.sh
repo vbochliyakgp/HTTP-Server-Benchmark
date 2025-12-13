@@ -141,18 +141,22 @@ Options:
   -l, --lang         Language: js, py, go, rust (required)
   -e, --endpoint     Endpoint: root, query, json, post, or "all" (default: all)
   -c, --concurrency  Concurrent requests (default: 1)
+  --cpu-lmt-cores    Number of CPU cores (default: 0.5)
+  --mem-lmt          Memory limit (e.g., 1G, 512M) (default: 1G)
   -h, --help         Show this help
 
 Examples:
-  ./benchmark.sh -l js 100                    # JS server, 100 sequential requests
-  ./benchmark.sh -l go -c 10 500              # Go server, 500 requests, 10 concurrent
-  ./benchmark.sh -l rust -e root -c 5 200     # Rust, root endpoint only, 5 concurrent
+  ./benchmark.sh -l js 100                              # JS server, 100 sequential requests
+  ./benchmark.sh -l go -c 10 500                        # Go server, 500 requests, 10 concurrent
+  ./benchmark.sh -l rust -e root -c 5 200               # Rust, root endpoint only, 5 concurrent
+  ./benchmark.sh -l js --cpu-lmt-cores 2 --mem-lmt 2G 1000  # 2 cores, 2GB RAM
 EOF
     exit 0
 }
 
 main() {
     local LANG="" ENDPOINT="all" CONC=1 NUM=""
+    local CPU_CORES="" MEMORY_LIMIT=""
     
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -160,6 +164,8 @@ main() {
             -l|--lang) LANG="$2"; shift 2 ;;
             -e|--endpoint) ENDPOINT="$2"; shift 2 ;;
             -c|--concurrency) CONC="$2"; shift 2 ;;
+            --cpu-lmt-cores) CPU_CORES="$2"; shift 2 ;;
+            --mem-lmt) MEMORY_LIMIT="$2"; shift 2 ;;
             -h|--help) usage ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) NUM="$1"; shift ;;
@@ -200,9 +206,19 @@ main() {
     local name=$(server_get_name "$LANG")
     local core=$(server_get_core "$LANG")
     
-    # Start server
-    echo "🚀 Starting $name server on port $port (CPU core $core)..."
-    SERVER_PID=$(server_start "$LANG" "$TEMP_DIR/server.log")
+    # Start server with resource limits
+    # Convert cores to percentage for systemd (1 core = 100%, 0.5 core = 50%, etc.)
+    local cpu_quota=""
+    if [[ -n "$CPU_CORES" ]]; then
+        # Multiply by 100 to get percentage (e.g., 2 cores = 200%, 0.5 = 50%)
+        cpu_quota=$(awk "BEGIN {printf \"%.0f\", $CPU_CORES * 100}")
+    fi
+    
+    local cpu_info="CPU core $core"
+    [[ -n "$CPU_CORES" ]] && cpu_info="$cpu_info, ${CPU_CORES} core(s)"
+    [[ -n "$MEMORY_LIMIT" ]] && cpu_info="$cpu_info, ${MEMORY_LIMIT} RAM"
+    echo "🚀 Starting $name server on port $port ($cpu_info)..."
+    SERVER_PID=$(server_start "$LANG" "$TEMP_DIR/server.log" "$cpu_quota" "$MEMORY_LIMIT")
     
     if [[ -z "$SERVER_PID" ]]; then
         echo "❌ Failed to start server"

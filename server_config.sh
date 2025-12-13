@@ -52,11 +52,11 @@ server_get_core() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Resource Limits
+# Resource Limits (can be overridden via server_start arguments)
 # ─────────────────────────────────────────────────────────────────────────────
 
-SERVER_CPU_QUOTA=50      # 0.5 CPU core (50%)
-SERVER_MEMORY_MAX=1G     # 1GB RAM
+SERVER_CPU_QUOTA=50      # Default: 0.5 CPU core (50%)
+SERVER_MEMORY_MAX=1G     # Default: 1GB RAM
 
 # ─────────────────────────────────────────────────────────────────────────────
 # API Endpoints
@@ -102,10 +102,12 @@ SERVER_DIR="${SERVER_DIR:-$(dirname "${BASH_SOURCE[0]}")}"
 _GO_BINARY=""
 
 # Start a server with resource limits
-# Args: $1=lang, $2=log_file
+# Args: $1=lang, $2=log_file, $3=cpu_quota (optional, %), $4=memory_max (optional, e.g. 1G)
 # Returns: PID via stdout, sets _GO_BINARY if Go
 server_start() {
     local lang=$1 log_file=$2
+    local cpu_quota=${3:-$SERVER_CPU_QUOTA}
+    local memory_max=${4:-$SERVER_MEMORY_MAX}
     local port=$(server_get_port "$lang")
     local core=$(server_get_core "$lang")
     local pid=""
@@ -114,13 +116,48 @@ server_start() {
     source "$(dirname "${BASH_SOURCE[0]}")/bench_lib.sh" 2>/dev/null
     bench_free_port "$port"
     
+    # Calculate number of cores needed from percentage (100% = 1 core, 200% = 2 cores, etc.)
+    # If cpu_quota is empty, use default (0.5 core = 50%)
+    local num_cores
+    if [[ -z "$cpu_quota" ]]; then
+        num_cores=1  # Will use 0.5 core via taskset
+    else
+        num_cores=$(( (cpu_quota + 99) / 100 ))  # Round up
+    fi
+    [[ $num_cores -lt 1 ]] && num_cores=1
+    
+    # Build CPU affinity list (if > 100%, use multiple cores)
+    local cpu_affinity=""
+    if [[ $num_cores -eq 1 ]]; then
+        cpu_affinity="$core"
+    else
+        # Use consecutive cores starting from the base core
+        local cores=""
+        for ((i=0; i<num_cores; i++)); do
+            cores="${cores}$((core + i))"
+            [[ $i -lt $((num_cores - 1)) ]] && cores="${cores},"
+        done
+        cpu_affinity="$cores"
+    fi
+    
+    # Use systemd-run for resource limits if available, otherwise just taskset
+    local run_cmd=""
+    if command -v systemd-run &>/dev/null; then
+        # systemd-run with CPU and memory limits
+        # If CPU quota > 100%, allow multiple cores via taskset
+        run_cmd="systemd-run --user --scope --quiet --property=CPUQuota=${cpu_quota}% --property=MemoryMax=${memory_max} taskset -c ${cpu_affinity}"
+    else
+        # Fallback to just taskset if systemd-run not available
+        run_cmd="taskset -c ${cpu_affinity}"
+    fi
+    
     case $lang in
         js)
-            taskset -c "$core" node "$SERVER_DIR/server.js" > "$log_file" 2>&1 &
+            $run_cmd node "$SERVER_DIR/server.js" > "$log_file" 2>&1 &
             pid=$!
             ;;
         py)
-            taskset -c "$core" python3 "$SERVER_DIR/server.py" > "$log_file" 2>&1 &
+            $run_cmd python3 "$SERVER_DIR/server.py" > "$log_file" 2>&1 &
             pid=$!
             ;;
         go)
@@ -128,7 +165,7 @@ server_start() {
             _GO_BINARY="/tmp/go_server_$$"
             go build -o "$_GO_BINARY" "$SERVER_DIR/server.go" 2>"$log_file"
             if [[ -f "$_GO_BINARY" ]]; then
-                taskset -c "$core" "$_GO_BINARY" >> "$log_file" 2>&1 &
+                $run_cmd "$_GO_BINARY" >> "$log_file" 2>&1 &
                 pid=$!
             fi
             ;;
@@ -137,7 +174,7 @@ server_start() {
             local rust_bin="/tmp/rust_server_$$"
             rustc -O "$SERVER_DIR/server.rs" -o "$rust_bin" 2>"$log_file"
             if [[ -f "$rust_bin" ]]; then
-                taskset -c "$core" "$rust_bin" >> "$log_file" 2>&1 &
+                $run_cmd "$rust_bin" >> "$log_file" 2>&1 &
                 pid=$!
                 rm -f "$rust_bin"  # Binary is loaded, can remove
             fi
