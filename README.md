@@ -2,7 +2,7 @@
 
 > **Performance comparison of minimal HTTP servers in JavaScript, Python, Go, Rust, and C++ — using only standard libraries.**
 
-A fair, apples-to-apples comparison of how different programming languages handle HTTP requests when constrained to their standard libraries only. No frameworks, no external dependencies.
+A fair, apples-to-apples comparison of how different programming languages handle HTTP requests when constrained to their standard libraries only. No frameworks, no external dependencies. We focused here mainly on I/O bound operations in api endpoints.
 
 ---
 
