@@ -5,6 +5,10 @@
 
 set -o pipefail
 
+# Server directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SERVER_DIR="$SCRIPT_DIR/servers"
+
 GO_BINARY=""
 RUST_BINARY=""
 CPP_BINARY=""
@@ -48,14 +52,14 @@ start_server() {
     
     case $lang in
         js)
-            node server.js >"$logfile" 2>&1 &
+            node "$SERVER_DIR/server.js" >"$logfile" 2>&1 &
             ;;
         py)
-            python3 server.py >"$logfile" 2>&1 &
+            python3 "$SERVER_DIR/server.py" >"$logfile" 2>&1 &
             ;;
         go)
             GO_BINARY="/tmp/go_test_$$"
-            go build -o "$GO_BINARY" server.go 2>"$logfile" || return 1
+            go build -o "$GO_BINARY" "$SERVER_DIR/server.go" 2>"$logfile" || return 1
             "$GO_BINARY" >>"$logfile" 2>&1 &
             ;;
         rust)
@@ -68,7 +72,7 @@ start_server() {
             [[ -z "$rustc_bin" ]] && rustc_bin=$(which rustc 2>/dev/null)
             
             if [[ -n "$rustc_bin" ]]; then
-                "$rustc_bin" -O server.rs -o "$RUST_BINARY" 2>"$logfile" || return 1
+                "$rustc_bin" -O "$SERVER_DIR/server.rs" -o "$RUST_BINARY" 2>"$logfile" || return 1
                 "$RUST_BINARY" >>"$logfile" 2>&1 &
             else
                 echo "rustc not found" >"$logfile"
@@ -78,10 +82,10 @@ start_server() {
         cpp)
             CPP_BINARY="/tmp/cpp_test_$$"
             if command -v g++ &>/dev/null; then
-                g++ -O3 -std=c++17 -pthread server.cpp -o "$CPP_BINARY" 2>"$logfile" || return 1
+                g++ -O3 -std=c++17 -pthread "$SERVER_DIR/server.cpp" -o "$CPP_BINARY" 2>"$logfile" || return 1
                 "$CPP_BINARY" >>"$logfile" 2>&1 &
             elif command -v clang++ &>/dev/null; then
-                clang++ -O3 -std=c++17 -pthread server.cpp -o "$CPP_BINARY" 2>"$logfile" || return 1
+                clang++ -O3 -std=c++17 -pthread "$SERVER_DIR/server.cpp" -o "$CPP_BINARY" 2>"$logfile" || return 1
                 "$CPP_BINARY" >>"$logfile" 2>&1 &
             else
                 echo "g++ or clang++ not found" >"$logfile"

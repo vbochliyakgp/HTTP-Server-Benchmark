@@ -82,7 +82,7 @@ server_get_endpoint() {
 # Server Management
 # ─────────────────────────────────────────────────────────────────────────────
 
-SERVER_DIR="${SERVER_DIR:-$(dirname "${BASH_SOURCE[0]}")}"
+SERVER_DIR="${SERVER_DIR:-$(dirname "${BASH_SOURCE[0]}")/servers}"
 _GO_BINARY=""
 _RUST_BINARY=""
 _CPP_BINARY=""
