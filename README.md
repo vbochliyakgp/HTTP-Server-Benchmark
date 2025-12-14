@@ -1,10 +1,10 @@
 # Simple HTTP Servers - Performance Comparison
 
-A comprehensive performance comparison of minimal HTTP servers implemented in **JavaScript**, **Python**, **Go**, and **Rust** using only standard libraries — no frameworks or external dependencies.
+A comprehensive performance comparison of minimal HTTP servers implemented in **JavaScript**, **Python**, **Go**, **Rust**, and **C++** using only standard libraries — no frameworks or external dependencies.
 
 ## Overview
 
-This project implements identical HTTP servers in four different languages to compare their performance characteristics under load. Each server handles the same three endpoints:
+This project implements identical HTTP servers in five different languages to compare their performance characteristics under load. Each server handles the same three endpoints:
 - Simple GET request (`/`)
 - Query parameter parsing (`/something?params`)
 - JSON request/response (`/something` with `?json=true`)
@@ -23,7 +23,7 @@ Test all servers to verify they work correctly:
 ```
 
 This will:
-1. Start all four servers on ports 3000-3003
+1. Start all five servers on ports 3000-3004
 2. Test each endpoint on each server
 3. Display response times
 4. Clean up automatically
@@ -65,6 +65,7 @@ Run benchmarks to see performance characteristics of each language:
 | **Go** | Goroutines | Lightweight coroutines | ~2KB stack | Near-zero overhead, handles millions of concurrent requests |
 | **JavaScript** | Event Loop | Single-threaded async I/O | Minimal | Non-blocking I/O, efficient for I/O-bound workloads |
 | **Rust** | OS Threads | One thread per request | ~2MB stack | High overhead (~3ms per thread spawn), no async in stdlib |
+| **C++** | OS Threads | `std::thread` per request | ~2MB stack | High overhead, manual thread management |
 | **Python** | ThreadingMixIn | OS threads with GIL | ~2MB stack | GIL prevents true parallelism, context switching overhead |
 
 ### Understanding the Metrics
@@ -85,6 +86,7 @@ Each server implements the same API using only standard libraries:
 | Python | `server.py` | 3001 | `python3 server.py` | None (interpreted) |
 | Go | `server.go` | 3002 | `go run server.go` | Optional (or `go build`) |
 | Rust | `server.rs` | 3003 | `rustc -O server.rs && ./server` | Required (optimized) |
+| C++ | `server.cpp` | 3004 | `g++ -O3 server.cpp && ./a.out` | Required (optimized) |
 
 ### Server Details
 
@@ -92,6 +94,7 @@ Each server implements the same API using only standard libraries:
 - **Python**: Uses `http.server` with `ThreadingMixIn` for concurrent requests
 - **Go**: Uses `net/http` package with goroutines (automatic concurrency)
 - **Rust**: Uses `std::net::TcpListener` with manual thread spawning
+- **C++**: Uses POSIX sockets (`sys/socket.h`) with thread-per-request model
 
 ## API Endpoints
 
@@ -165,7 +168,7 @@ The benchmark uses `wrk`, a modern HTTP benchmarking tool written in C. It's des
 
 | Flag | Description | Default | Notes |
 |------|-------------|---------|-------|
-| `-l, --lang` | Language to benchmark | required | `js`, `py`, `go`, or `rust` |
+| `-l, --lang` | Language to benchmark | required | `js`, `py`, `go`, `rust`, or `cpp` |
 | `-e, --endpoint` | Endpoint(s) to test | `all` | `root`, `query`, `json`, `post`, or `all` |
 | `-c, --connections` | Concurrent connections | `50` | Number of simultaneous connections wrk maintains |
 | `-d, --duration` | Test duration (seconds) | `5` | How long to run each endpoint test |
@@ -260,6 +263,25 @@ The benchmark displays:
 - Compilation time is slower than other languages
 - Steeper learning curve
 
+### C++
+
+**Strengths:**
+- **Zero-cost abstractions**: No runtime overhead, direct system calls
+- **Maximum performance**: Compiled to native code, highly optimized
+- **Low memory usage**: Manual memory management, no GC overhead
+- **Standard library**: Rich STL for containers and algorithms
+
+**Current Implementation:**
+- **Thread-per-request**: Uses `std::thread` for concurrent requests
+- **POSIX sockets**: Direct system calls for maximum control
+- **Manual HTTP parsing**: Full control over request/response handling
+
+**Trade-offs:**
+- Thread-per-request has overhead (~2MB stack per thread)
+- Manual memory management requires careful coding
+- Compilation time can be slower
+- More verbose than higher-level languages
+
 ### Python
 
 **Strengths:**
@@ -312,13 +334,13 @@ The benchmark displays:
 **Ubuntu/Debian:**
 ```bash
 sudo apt update
-sudo apt install nodejs python3 golang-go rustc wrk curl
+sudo apt install nodejs python3 golang-go rustc g++ wrk curl
 ```
 
 **macOS:**
 ```bash
 brew install node python go rust wrk
-# curl is pre-installed
+# g++/clang++ and curl are pre-installed
 ```
 
 **Verify installations:**
@@ -327,6 +349,7 @@ node --version
 python3 --version
 go version
 rustc --version
+g++ --version  # or clang++ --version
 wrk --version
 ```
 
@@ -340,6 +363,7 @@ wrk --version
 ├── server.py          # Python server (ThreadingMixIn)
 ├── server.go          # Go server (goroutines)
 ├── server.rs          # Rust server (OS threads)
+├── server.cpp         # C++ server (OS threads)
 ├── benchmark.sh       # Main benchmark orchestrator
 ├── bench_lib.sh       # Benchmark library (wrk wrapper, stats parsing)
 ├── server_config.sh   # Server configuration (ports, start/stop logic)

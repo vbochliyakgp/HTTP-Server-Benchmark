@@ -7,7 +7,7 @@
 # Server Definitions
 # ─────────────────────────────────────────────────────────────────────────────
 
-SERVER_LANGS=(js py go rust)
+SERVER_LANGS=(js py go rust cpp)
 
 server_get_port() {
     case $1 in
@@ -15,6 +15,7 @@ server_get_port() {
         py)   echo 3001 ;;
         go)   echo 3002 ;;
         rust) echo 3003 ;;
+        cpp)  echo 3004 ;;
         *)    echo 0 ;;
     esac
 }
@@ -25,6 +26,7 @@ server_get_name() {
         py)   echo "Python" ;;
         go)   echo "Go" ;;
         rust) echo "Rust" ;;
+        cpp)  echo "C++" ;;
         *)    echo "Unknown" ;;
     esac
 }
@@ -35,6 +37,7 @@ server_get_core() {
         py)   echo 1 ;;
         go)   echo 2 ;;
         rust) echo 3 ;;
+        cpp)  echo 4 ;;
         *)    echo 0 ;;
     esac
 }
@@ -82,6 +85,7 @@ server_get_endpoint() {
 SERVER_DIR="${SERVER_DIR:-$(dirname "${BASH_SOURCE[0]}")}"
 _GO_BINARY=""
 _RUST_BINARY=""
+_CPP_BINARY=""
 
 # Start server with resource limits
 # Args: $1=lang $2=log_file $3=cpu_quota(%) $4=memory_max
@@ -151,6 +155,21 @@ server_start() {
                 fi
             fi
             ;;
+        cpp)
+            _CPP_BINARY="/tmp/cpp_server_$$"
+            # Compile C++ with optimizations
+            if command -v g++ &>/dev/null; then
+                if g++ -O3 -std=c++17 -pthread "$SERVER_DIR/server.cpp" -o "$_CPP_BINARY" 2>"$log_file"; then
+                    $run_cmd "$_CPP_BINARY" >>"$log_file" 2>&1 &
+                    pid=$!
+                fi
+            elif command -v clang++ &>/dev/null; then
+                if clang++ -O3 -std=c++17 -pthread "$SERVER_DIR/server.cpp" -o "$_CPP_BINARY" 2>"$log_file"; then
+                    $run_cmd "$_CPP_BINARY" >>"$log_file" 2>&1 &
+                    pid=$!
+                fi
+            fi
+            ;;
     esac
     
     echo "$pid"
@@ -176,4 +195,5 @@ server_wait_ready() {
 server_cleanup() {
     [[ -n "$_GO_BINARY" && -f "$_GO_BINARY" ]] && rm -f "$_GO_BINARY"
     [[ -n "$_RUST_BINARY" && -f "$_RUST_BINARY" ]] && rm -f "$_RUST_BINARY"
+    [[ -n "$_CPP_BINARY" && -f "$_CPP_BINARY" ]] && rm -f "$_CPP_BINARY"
 }

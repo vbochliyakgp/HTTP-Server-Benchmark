@@ -7,14 +7,15 @@ set -o pipefail
 
 GO_BINARY=""
 RUST_BINARY=""
+CPP_BINARY=""
 declare -a PIDS=()
 
 get_port() {
-    case $1 in js) echo 3000;; py) echo 3001;; go) echo 3002;; rust) echo 3003;; esac
+    case $1 in js) echo 3000;; py) echo 3001;; go) echo 3002;; rust) echo 3003;; cpp) echo 3004;; esac
 }
 
 get_name() {
-    case $1 in js) echo "JavaScript";; py) echo "Python";; go) echo "Go";; rust) echo "Rust";; esac
+    case $1 in js) echo "JavaScript";; py) echo "Python";; go) echo "Go";; rust) echo "Rust";; cpp) echo "C++";; esac
 }
 
 cleanup() {
@@ -24,6 +25,7 @@ cleanup() {
     done
     [[ -n "$GO_BINARY" && -f "$GO_BINARY" ]] && rm -f "$GO_BINARY"
     [[ -n "$RUST_BINARY" && -f "$RUST_BINARY" ]] && rm -f "$RUST_BINARY"
+    [[ -n "$CPP_BINARY" && -f "$CPP_BINARY" ]] && rm -f "$CPP_BINARY"
 }
 trap cleanup EXIT INT TERM
 
@@ -70,6 +72,19 @@ start_server() {
                 "$RUST_BINARY" >>"$logfile" 2>&1 &
             else
                 echo "rustc not found" >"$logfile"
+                return 1
+            fi
+            ;;
+        cpp)
+            CPP_BINARY="/tmp/cpp_test_$$"
+            if command -v g++ &>/dev/null; then
+                g++ -O3 -std=c++17 -pthread server.cpp -o "$CPP_BINARY" 2>"$logfile" || return 1
+                "$CPP_BINARY" >>"$logfile" 2>&1 &
+            elif command -v clang++ &>/dev/null; then
+                clang++ -O3 -std=c++17 -pthread server.cpp -o "$CPP_BINARY" 2>"$logfile" || return 1
+                "$CPP_BINARY" >>"$logfile" 2>&1 &
+            else
+                echo "g++ or clang++ not found" >"$logfile"
                 return 1
             fi
             ;;
@@ -133,13 +148,14 @@ main() {
     local -a errors=()
     local -a started=()
     
-    for lang in js py go rust; do
+    for lang in js py go rust cpp; do
         local runtime
         case $lang in
             js) runtime="node" ;;
             py) runtime="python3" ;;
             go) runtime="go" ;;
             rust) runtime="rustc" ;;
+            cpp) runtime="g++" ;;
         esac
         
         # Check if runtime exists (or for rust, check rustup toolchains)
@@ -147,6 +163,8 @@ main() {
         if command -v "$runtime" &>/dev/null; then
             has_runtime=true
         elif [[ "$lang" == "rust" && -d "$HOME/.rustup/toolchains" ]]; then
+            has_runtime=true
+        elif [[ "$lang" == "cpp" && ( -n "$(command -v g++ 2>/dev/null)" || -n "$(command -v clang++ 2>/dev/null)" ) ]]; then
             has_runtime=true
         fi
         
