@@ -5,9 +5,12 @@
 #include <thread>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
 #include <cstring>
 #include <algorithm>
+#include <cerrno>
+#include <stdexcept>
 
 class HTTPServer {
 private:
@@ -64,9 +67,47 @@ private:
         return response.str();
     }
 
+    // Helper function to read exactly N bytes (handles partial reads)
+    bool readExact(int socket, void* buffer, size_t count) {
+        char* buf = static_cast<char*>(buffer);
+        size_t totalRead = 0;
+        while (totalRead < count) {
+            ssize_t n = read(socket, buf + totalRead, count - totalRead);
+            if (n <= 0) {
+                return false;  // Error or EOF
+            }
+            totalRead += n;
+        }
+        return true;
+    }
+
+    // Helper function to send all data (handles partial sends)
+    bool sendAll(int socket, const void* buffer, size_t count) {
+        const char* buf = static_cast<const char*>(buffer);
+        size_t totalSent = 0;
+        while (totalSent < count) {
+            ssize_t n = send(socket, buf + totalSent, count - totalSent, 0);
+            if (n <= 0) {
+                return false;  // Error
+            }
+            totalSent += n;
+        }
+        return true;
+    }
+
     void handleClient(int client_socket) {
+        // Set socket options for better performance and timeout
+        int flag = 1;
+        setsockopt(client_socket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+        
+        struct timeval timeout;
+        timeout.tv_sec = 5;  // 5 second timeout
+        timeout.tv_usec = 0;
+        setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        setsockopt(client_socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+
         char buffer[8192] = {0};
-        int valread = read(client_socket, buffer, 8192);
+        ssize_t valread = read(client_socket, buffer, 8191);
         
         if (valread <= 0) {
             close(client_socket);
@@ -98,7 +139,14 @@ private:
                 std::transform(key.begin(), key.end(), key.begin(), ::tolower);
                 headers[key] = value;
                 if (key == "content-length") {
-                    contentLength = std::stoi(value);
+                    try {
+                        contentLength = std::stoi(value);
+                        if (contentLength < 0 || contentLength > 1048576) {  // Max 1MB
+                            contentLength = 0;
+                        }
+                    } catch (const std::exception&) {
+                        contentLength = 0;
+                    }
                 }
             }
         }
@@ -138,17 +186,28 @@ private:
             std::string body;
             if (contentLength > 0) {
                 body.resize(contentLength);
-                read(client_socket, &body[0], contentLength);
+                if (!readExact(client_socket, &body[0], contentLength)) {
+                    // Failed to read body, send error response
+                    response = makeResponse(400, "Bad Request", "text/plain");
+                } else {
+                    std::ostringstream json;
+                    json << "{\"route\":\"/something\",\"body\":" << (body.empty() ? "{}" : body) << "}";
+                    response = makeResponse(200, json.str(), "application/json");
+                }
+            } else {
+                std::ostringstream json;
+                json << "{\"route\":\"/something\",\"body\":{}}";
+                response = makeResponse(200, json.str(), "application/json");
             }
-            std::ostringstream json;
-            json << "{\"route\":\"/something\",\"body\":" << (body.empty() ? "{}" : body) << "}";
-            response = makeResponse(200, json.str(), "application/json");
         }
         else {
             response = makeResponse(404, "Not Found", "text/plain");
         }
 
-        send(client_socket, response.c_str(), response.length(), 0);
+        // Send response with error handling
+        if (!sendAll(client_socket, response.c_str(), response.length())) {
+            // Send failed, but connection will be closed anyway
+        }
         close(client_socket);
     }
 
@@ -162,6 +221,9 @@ public:
 
         int opt = 1;
         setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        
+        // Set TCP_NODELAY for lower latency
+        setsockopt(server_fd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
 
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = INADDR_ANY;
