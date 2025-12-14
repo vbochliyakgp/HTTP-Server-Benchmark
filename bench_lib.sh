@@ -39,31 +39,47 @@ bench_request() {
 
 # Run N requests to an endpoint, with concurrency limit
 # Args: $1=url, $2=method, $3=body, $4=num_requests, $5=concurrency, $6=output_file
+# Uses HTTP keep-alive to reuse connections and avoid network stack saturation
 bench_run_requests() {
     local url=$1 method=$2 body=$3 num=$4 conc=$5 outfile=$6
     
     > "$outfile"  # Clear output file
     
+    # Create temp directory for worker files to avoid I/O contention
+    local tmpdir=$(mktemp -d)
+    trap "rm -rf '$tmpdir'" EXIT
+    
     # For efficiency with large request counts, use xargs for parallelism
-    # Each worker makes requests and appends to file
+    # Each worker writes to its own temp file to avoid lock contention
+    # Uses HTTP keep-alive to reuse connections (reduces network overhead)
     local worker='
-        url="$1"; method="$2"; body="$3"; outfile="$4"
+        url="$1"; method="$2"; body="$3"; tmpdir="$4"; worker_id="$5"
+        worker_file="${tmpdir}/worker_${worker_id}.txt"
+        > "$worker_file"
+        
         start=$(date +%s%N)
         if [[ "$method" == "POST" ]]; then
-            status=$(curl -s -o /dev/null -w "%{http_code}" -X POST -d "$body" "$url" 2>/dev/null)
+            status=$(curl -s -o /dev/null -w "%{http_code}" --keepalive-time 30 --tcp-nodelay -X POST -d "$body" "$url" 2>/dev/null)
         else
-            status=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null)
+            status=$(curl -s -o /dev/null -w "%{http_code}" --keepalive-time 30 --tcp-nodelay "$url" 2>/dev/null)
         fi
         end=$(date +%s%N)
         ms=$(( (end - start) / 1000000 ))
         [[ -z "$status" || "$status" == "000" ]] && status=0
         ok=0
         [[ "$status" -ge 200 && "$status" -lt 300 ]] && ok=1
-        echo "$ok $ms" >> "$outfile"
+        echo "$ok $ms" > "$worker_file"
     '
     
-    # Generate sequence and run with xargs
-    seq 1 "$num" | xargs -P "$conc" -I {} bash -c "$worker" _ "$url" "$method" "$body" "$outfile"
+    # Generate sequence and run with xargs (each gets unique worker ID)
+    seq 1 "$num" | xargs -P "$conc" -I {} bash -c "$worker" _ "$url" "$method" "$body" "$tmpdir" "{}"
+    
+    # Merge all worker files into output file (fast, no contention)
+    cat "$tmpdir"/worker_*.txt 2>/dev/null > "$outfile"
+    
+    # Cleanup
+    rm -rf "$tmpdir"
+    trap - EXIT
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
