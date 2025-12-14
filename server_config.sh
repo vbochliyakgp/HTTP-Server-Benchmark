@@ -1,24 +1,14 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════════
-# server_config.sh - Project-Specific Server Configuration
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# Defines:
-#   - Server languages and their properties (port, name, CPU core)
-#   - How to start each server type
-#   - API endpoints to benchmark
-#   - Resource limits
-#
+# server_config.sh - Server Configuration and Management
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Server Definitions
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Available languages
 SERVER_LANGS=(js py go rust)
 
-# Get port for a language
 server_get_port() {
     case $1 in
         js)   echo 3000 ;;
@@ -29,7 +19,6 @@ server_get_port() {
     esac
 }
 
-# Get display name for a language
 server_get_name() {
     case $1 in
         js)   echo "JavaScript" ;;
@@ -40,7 +29,6 @@ server_get_name() {
     esac
 }
 
-# Get CPU core to pin for a language
 server_get_core() {
     case $1 in
         js)   echo 0 ;;
@@ -51,18 +39,18 @@ server_get_core() {
     esac
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Resource Limits (can be overridden via server_start arguments)
-# ─────────────────────────────────────────────────────────────────────────────
-
-SERVER_CPU_QUOTA=50      # Default: 0.5 CPU core (50%)
-SERVER_MEMORY_MAX=1G     # Default: 1GB RAM
+server_is_valid_lang() {
+    local lang=$1
+    for l in "${SERVER_LANGS[@]}"; do
+        [[ "$l" == "$lang" ]] && return 0
+    done
+    return 1
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # API Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Endpoint definitions: name|path|method|body
 SERVER_ENDPOINTS=(
     "root|/|GET|"
     "query|/something?name=test&value=123|GET|"
@@ -70,8 +58,6 @@ SERVER_ENDPOINTS=(
     "post|/something|POST|{\"test\":\"data\"}"
 )
 
-# Parse endpoint definition
-# Args: $1=endpoint_def, $2=field (name|path|method|body)
 server_parse_endpoint() {
     local def=$1 field=$2
     case $field in
@@ -82,101 +68,87 @@ server_parse_endpoint() {
     esac
 }
 
-# Get endpoint by name
 server_get_endpoint() {
     local name=$1
     for ep in "${SERVER_ENDPOINTS[@]}"; do
-        local ep_name=$(server_parse_endpoint "$ep" "name")
-        [[ "$ep_name" == "$name" ]] && { echo "$ep"; return; }
+        [[ "$(echo "$ep" | cut -d'|' -f1)" == "$name" ]] && { echo "$ep"; return; }
     done
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Server Start Functions
+# Server Management
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Directory where server files are located
 SERVER_DIR="${SERVER_DIR:-$(dirname "${BASH_SOURCE[0]}")}"
-
-# Temporary storage for Go binary path
 _GO_BINARY=""
+_RUST_BINARY=""
 
-# Start a server with resource limits
-# Args: $1=lang, $2=log_file, $3=cpu_quota (optional, %), $4=memory_max (optional, e.g. 1G)
-# Returns: PID via stdout, sets _GO_BINARY if Go
+# Start server with resource limits
+# Args: $1=lang $2=log_file $3=cpu_quota(%) $4=memory_max
+# Returns: PID
 server_start() {
-    local lang=$1 log_file=$2
-    local cpu_quota=${3:-$SERVER_CPU_QUOTA}
-    local memory_max=${4:-$SERVER_MEMORY_MAX}
+    local lang=$1 log_file=$2 cpu_quota=${3:-100} memory_max=${4:-1G}
     local port=$(server_get_port "$lang")
     local core=$(server_get_core "$lang")
     local pid=""
     
-    # Free port if busy
-    source "$(dirname "${BASH_SOURCE[0]}")/bench_lib.sh" 2>/dev/null
-    bench_free_port "$port"
+    # Ensure port is free
+    local existing_pid
+    existing_pid=$(lsof -ti ":$port" -sTCP:LISTEN 2>/dev/null | head -1) || true
+    [[ -n "$existing_pid" ]] && kill -9 "$existing_pid" 2>/dev/null && sleep 0.3
     
-    # Calculate number of cores needed from percentage (100% = 1 core, 200% = 2 cores, etc.)
-    # If cpu_quota is empty, use default (0.5 core = 50%)
-    local num_cores
-    if [[ -z "$cpu_quota" ]]; then
-        num_cores=1  # Will use 0.5 core via taskset
-    else
-        num_cores=$(( (cpu_quota + 99) / 100 ))  # Round up
-    fi
+    # Calculate cores needed
+    local num_cores=$(( (cpu_quota + 99) / 100 ))
     [[ $num_cores -lt 1 ]] && num_cores=1
     
-    # Build CPU affinity list (if > 100%, use multiple cores)
-    local cpu_affinity=""
-    if [[ $num_cores -eq 1 ]]; then
-        cpu_affinity="$core"
-    else
-        # Use consecutive cores starting from the base core
-        local cores=""
-        for ((i=0; i<num_cores; i++)); do
-            cores="${cores}$((core + i))"
-            [[ $i -lt $((num_cores - 1)) ]] && cores="${cores},"
-        done
-        cpu_affinity="$cores"
+    # Build affinity (single core or range)
+    local affinity="$core"
+    if [[ $num_cores -gt 1 ]]; then
+        local end_core=$((core + num_cores - 1))
+        affinity="$core-$end_core"
     fi
     
-    # Use systemd-run for resource limits if available, otherwise just taskset
-    local run_cmd=""
+    # Build run command with limits
+    local run_cmd="taskset -c $affinity"
     if command -v systemd-run &>/dev/null; then
-        # systemd-run with CPU and memory limits
-        # If CPU quota > 100%, allow multiple cores via taskset
-        run_cmd="systemd-run --user --scope --quiet --property=CPUQuota=${cpu_quota}% --property=MemoryMax=${memory_max} taskset -c ${cpu_affinity}"
-    else
-        # Fallback to just taskset if systemd-run not available
-        run_cmd="taskset -c ${cpu_affinity}"
+        run_cmd="systemd-run --user --scope --quiet -p CPUQuota=${cpu_quota}% -p MemoryMax=$memory_max $run_cmd"
     fi
     
     case $lang in
         js)
-            $run_cmd node "$SERVER_DIR/server.js" > "$log_file" 2>&1 &
+            $run_cmd node "$SERVER_DIR/server.js" >"$log_file" 2>&1 &
             pid=$!
             ;;
         py)
-            $run_cmd python3 "$SERVER_DIR/server.py" > "$log_file" 2>&1 &
+            $run_cmd python3 "$SERVER_DIR/server.py" >"$log_file" 2>&1 &
             pid=$!
             ;;
         go)
-            # Pre-compile Go binary
             _GO_BINARY="/tmp/go_server_$$"
-            go build -o "$_GO_BINARY" "$SERVER_DIR/server.go" 2>"$log_file"
-            if [[ -f "$_GO_BINARY" ]]; then
-                $run_cmd "$_GO_BINARY" >> "$log_file" 2>&1 &
+            if go build -o "$_GO_BINARY" "$SERVER_DIR/server.go" 2>"$log_file"; then
+                $run_cmd "$_GO_BINARY" >>"$log_file" 2>&1 &
                 pid=$!
             fi
             ;;
         rust)
-            # Compile and run Rust
-            local rust_bin="/tmp/rust_server_$$"
-            rustc -O "$SERVER_DIR/server.rs" -o "$rust_bin" 2>"$log_file"
-            if [[ -f "$rust_bin" ]]; then
-                $run_cmd "$rust_bin" >> "$log_file" 2>&1 &
+            _RUST_BINARY="/tmp/rust_server_$$"
+            # Try to find actual rustc binary (bypass rustup proxy)
+            local rustc_bin=""
+            if [[ -d "$HOME/.rustup/toolchains" ]]; then
+                rustc_bin=$(find "$HOME/.rustup/toolchains" -name "rustc" -type f 2>/dev/null | head -1)
+            fi
+            [[ -z "$rustc_bin" ]] && rustc_bin=$(which rustc 2>/dev/null || echo "")
+            
+            # Try direct rustc call with bypass
+            if [[ -n "$rustc_bin" ]] && "$rustc_bin" -O "$SERVER_DIR/server.rs" -o "$_RUST_BINARY" 2>>"$log_file" 2>/dev/null; then
+                $run_cmd "$_RUST_BINARY" >>"$log_file" 2>&1 &
                 pid=$!
-                rm -f "$rust_bin"  # Binary is loaded, can remove
+            elif command -v rustc &>/dev/null; then
+                # Last resort: try rustc anyway (may fail)
+                if RUSTUP_TOOLCHAIN=stable rustc -O "$SERVER_DIR/server.rs" -o "$_RUST_BINARY" 2>>"$log_file" 2>/dev/null; then
+                    $run_cmd "$_RUST_BINARY" >>"$log_file" 2>&1 &
+                    pid=$!
+                fi
             fi
             ;;
     esac
@@ -184,34 +156,24 @@ server_start() {
     echo "$pid"
 }
 
-# Wait for server to be ready
-# Args: $1=port, $2=timeout_seconds
+# Wait for server to respond
+# Args: $1=port $2=max_retries (default 30)
 server_wait_ready() {
-    local port=$1 timeout=${2:-10}
-    local elapsed=0
+    local port=$1 max_retries=${2:-30}
+    local i=0
     
-    while [[ $elapsed -lt $timeout ]]; do
-        if curl -s -o /dev/null "http://localhost:$port/" 2>/dev/null; then
+    while [[ $i -lt $max_retries ]]; do
+        if curl -sf -o /dev/null --max-time 1 "http://localhost:$port/" 2>/dev/null; then
             return 0
         fi
         sleep 0.2
-        elapsed=$((elapsed + 1))
+        ((i++))
     done
-    
     return 1
 }
 
-# Cleanup Go binary if exists
+# Cleanup binaries
 server_cleanup() {
     [[ -n "$_GO_BINARY" && -f "$_GO_BINARY" ]] && rm -f "$_GO_BINARY"
+    [[ -n "$_RUST_BINARY" && -f "$_RUST_BINARY" ]] && rm -f "$_RUST_BINARY"
 }
-
-# Validate language
-server_is_valid_lang() {
-    local lang=$1
-    for l in "${SERVER_LANGS[@]}"; do
-        [[ "$l" == "$lang" ]] && return 0
-    done
-    return 1
-}
-

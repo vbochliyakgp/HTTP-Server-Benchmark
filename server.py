@@ -1,8 +1,13 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from urllib.parse import urlparse, parse_qs
 import json
 
 class Handler(BaseHTTPRequestHandler):
+    # Disable logging for performance
+    def log_message(self, format, *args):
+        pass
+    
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -33,8 +38,13 @@ class Handler(BaseHTTPRequestHandler):
     def respond(self, code, body, content_type='text/plain'):
         self.send_response(code)
         self.send_header('Content-Type', content_type)
+        self.send_header('Content-Length', len(body.encode()))
         self.end_headers()
         self.wfile.write(body.encode())
 
-HTTPServer(('', 3001), Handler).serve_forever()
+# Threading server for concurrent request handling
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True  # Don't wait for threads on shutdown
 
+print("Python server running on :3001")
+ThreadingHTTPServer(('', 3001), Handler).serve_forever()

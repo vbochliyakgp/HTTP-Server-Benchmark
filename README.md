@@ -1,197 +1,427 @@
-# Simple HTTP Servers
+# Simple HTTP Servers - Performance Comparison
 
-Minimal HTTP servers in 4 languages using only standard libraries — no frameworks.
+A comprehensive performance comparison of minimal HTTP servers implemented in **JavaScript**, **Python**, **Go**, and **Rust** using only standard libraries — no frameworks or external dependencies.
 
-## Servers
+## Overview
 
-| Language   | File        | Port | CPU Core | Run Command                   |
-|------------|-------------|------|----------|-------------------------------|
-| JavaScript | `server.js` | 3000 | 0        | `node server.js`              |
-| Python     | `server.py` | 3001 | 1        | `python3 server.py`           |
-| Go         | `server.go` | 3002 | 2        | `go run server.go`            |
-| Rust       | `server.rs` | 3003 | 3        | `rustc server.rs && ./server` |
+This project implements identical HTTP servers in four different languages to compare their performance characteristics under load. Each server handles the same three endpoints:
+- Simple GET request (`/`)
+- Query parameter parsing (`/something?params`)
+- JSON request/response (`/something` with `?json=true`)
+- POST request with body parsing (`/something`)
 
-**Resource Limits (configurable via benchmark args):**
-- CPU: Pinned to specific core(s) via `taskset`, with quota limits via `systemd-run`
-- Memory: Limited via `systemd-run` (default: 1GB)
-- Go is pre-compiled to binary for proper PID tracking
-- Each server runs isolated on its own CPU core(s)
+All servers are benchmarked using `wrk`, a high-performance HTTP benchmarking tool, under identical conditions to ensure fair comparison.
 
-## API Endpoints
+## Quick Start
 
-### GET `/`
-```
-Hello from {Language}!
-```
+### Run Functional Tests
 
-### GET `/something?params`
-**String:** `Route: /something, Query: {name: value}`
+Test all servers to verify they work correctly:
 
-**JSON** (`?json=true`):
-```json
-{"route":"/something","query":{"json":"true","key":"value"}}
-```
-
-### POST `/something`
-```json
-{"route":"/something","body":{"hello":"world"}}
-```
-
-## Testing
-
-### Quick Test
 ```bash
 ./test.sh
 ```
-Starts all servers on separate CPU cores, tests each endpoint with latency.
 
-### Benchmark
+This will:
+1. Start all four servers on ports 3000-3003
+2. Test each endpoint on each server
+3. Display response times
+4. Clean up automatically
+
+### Run Performance Benchmark
+
+Benchmark a specific language:
+
 ```bash
-./benchmark.sh -l <lang> [options] <num_requests>
+# Benchmark Go server with default settings (50 connections, 5 seconds)
+./benchmark.sh -l go
+
+# High-load test: 200 connections for 10 seconds
+./benchmark.sh -l js -c 200 -d 10
+
+# Test only root endpoint
+./benchmark.sh -l rust -e root -c 100
 ```
 
-**Options:**
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-l, --lang` | Language: `js`, `py`, `go`, or `rust` (required) | - |
-| `-e, --endpoint` | Endpoint: `root`, `query`, `json`, `post`, or `all` | `all` |
-| `-c, --concurrency` | Concurrent requests: number or `all` | `1` |
-| `--cpu-lmt-cores` | Number of CPU cores (e.g., `0.5`, `1`, `2`, `4`) | `0.5` |
-| `--mem-lmt` | Memory limit (e.g., `1G`, `512M`, `2G`) | `1G` |
-| `-h, --help` | Show help | - |
+## Performance Testing
 
-**Examples:**
+**Test Methodology:**
+- **Connections**: Configurable concurrent connections (default: 50)
+- **Duration**: Configurable test duration per endpoint (default: 5 seconds)
+- **CPU**: Configurable CPU cores (default: 1)
+- **Memory**: Configurable memory limit (default: 1GB)
+- **Tool**: `wrk` with latency distribution enabled
+
+Run benchmarks to see performance characteristics of each language:
+
 ```bash
-# JavaScript server, 100 sequential requests (default: 0.5 core, 1GB RAM)
-./benchmark.sh -l js 100
-
-# Go server, 1000 requests with 50 concurrent
-./benchmark.sh -l go -c 50 1000
-
-# Python, all requests concurrent
-./benchmark.sh -l py -c all 500
-
-# Rust, root endpoint only, 10 concurrent
-./benchmark.sh -l rust -e root -c 10 200
-
-# 2 CPU cores, 2GB RAM
-./benchmark.sh -l js --cpu-lmt-cores 2 --mem-lmt 2G 1000
-
-# 4 CPU cores, 512MB RAM
-./benchmark.sh -l go --cpu-lmt-cores 4 --mem-lmt 512M 5000
-
-# Large scale: 10000 requests with 4 cores
-./benchmark.sh -l js --cpu-lmt-cores 4 -c 100 10000
+./benchmark.sh -l go -c 100 -d 5
 ```
 
-## Live Display
+### Concurrency Models Explained
 
-The benchmark shows **real-time updates every 0.5 seconds**:
+| Language | Model | Implementation | Overhead | Notes |
+|----------|-------|----------------|----------|-------|
+| **Go** | Goroutines | Lightweight coroutines | ~2KB stack | Near-zero overhead, handles millions of concurrent requests |
+| **JavaScript** | Event Loop | Single-threaded async I/O | Minimal | Non-blocking I/O, efficient for I/O-bound workloads |
+| **Rust** | OS Threads | One thread per request | ~2MB stack | High overhead (~3ms per thread spawn), no async in stdlib |
+| **Python** | ThreadingMixIn | OS threads with GIL | ~2MB stack | GIL prevents true parallelism, context switching overhead |
 
-```
-🚀 Starting JavaScript server on port 3000 (CPU core 0, 2 core(s), 2G RAM)...
-   PID: 123456
+### Understanding the Metrics
 
-📊 Benchmark: 1000 requests per endpoint, concurrent (×50)
-   Endpoints: root query json post
+- **Requests/sec (req/s)**: Throughput - how many requests the server can handle per second
+- **Avg Latency**: Average response time in milliseconds
+- **P50/P90/P99**: Percentiles - 50% of requests are faster than P50, 90% faster than P90, etc.
+- **Max Latency**: Worst-case response time
+- **Memory**: Peak memory usage during benchmark
 
-JavaScript    CPU: 5.20    MEM: 58   MB                                                     
-┌────────────┬────────┬────────┬──────────┬────────┬────────┬────────┬────────┬────────┐
-│ Endpoint   │   Done │ Failed │   Req/s  │ Min ms │ Avg ms │ P50 ms │ P95 ms │ Max ms │
-├────────────┼────────┼────────┼──────────┼────────┼────────┼────────┼────────┼────────┤
-│ root       │    250 │      - │        - │      - │      - │      - │      - │      - │
-│ query      │      - │      - │        - │      - │      - │      - │      - │      - │
-│ json       │      - │      - │        - │      - │      - │      - │      - │      - │
-│ post       │      - │      - │        - │      - │      - │      - │      - │      - │
-└────────────┴────────┴────────┴──────────┴────────┴────────┴────────┴────────┴────────┘
-```
+## Servers
 
-**Live columns:**
-| Column | Description |
-|--------|-------------|
-| Done | Completed requests (live count while running) |
-| Failed | Failed requests |
-| Req/s | Requests per second (shown when endpoint completes) |
-| Min/Avg/P50/P95/Max | Latency statistics in milliseconds |
-| CPU% | Current CPU usage (2 decimal places) |
-| MEM MB | Current memory usage in MB |
+Each server implements the same API using only standard libraries:
 
-**Status:**
-- `-` = Pending (not started)
-- `N` = Running (live count updates every 0.5s)
-- Final stats shown when endpoint completes
+| Language | File | Port | Run Command | Compilation |
+|----------|------|------|-------------|-------------|
+| JavaScript | `server.js` | 3000 | `node server.js` | None (interpreted) |
+| Python | `server.py` | 3001 | `python3 server.py` | None (interpreted) |
+| Go | `server.go` | 3002 | `go run server.go` | Optional (or `go build`) |
+| Rust | `server.rs` | 3003 | `rustc -O server.rs && ./server` | Required (optimized) |
 
-## Architecture
+### Server Details
 
-### Modular Design
+- **JavaScript**: Uses Node.js `http` module with event-driven architecture
+- **Python**: Uses `http.server` with `ThreadingMixIn` for concurrent requests
+- **Go**: Uses `net/http` package with goroutines (automatic concurrency)
+- **Rust**: Uses `std::net::TcpListener` with manual thread spawning
 
-The project uses a clean, modular architecture:
+## API Endpoints
 
-```
-├── bench_lib.sh        # Generic benchmarking library (reusable)
-│   ├── HTTP Requests   # Single request, batch execution
-│   ├── Statistics      # Min/max/avg/p50/p95 calculation
-│   ├── Resource Monitor # CPU/MEM sampling
-│   └── Display Utils   # Cursor control, progress
-│
-├── server_config.sh    # Project-specific configuration
-│   ├── Server Defs     # Ports, names, CPU cores
-│   ├── Endpoints       # API endpoint definitions
-│   ├── Server Start    # How to start each language
-│   └── Resource Limits # CPU/memory constraints
-│
-└── benchmark.sh        # Main orchestrator
-    ├── Argument Parsing
-    ├── Server Management
-    ├── Benchmark Execution
-    └── Live Display
+All servers implement identical endpoints:
+
+### GET `/`
+
+Simple hello endpoint.
+
+**Request:**
+```bash
+curl http://localhost:3000/
 ```
 
-**Benefits:**
-- `bench_lib.sh` can be reused for any HTTP benchmarking project
-- `server_config.sh` isolates project-specific details
-- `benchmark.sh` is simple and focused on orchestration
+**Response:**
+```
+Hello from JavaScript!
+```
 
-### Server Execution
+### GET `/something?params`
 
-Each server:
-- Pinned to specific CPU core(s) via `taskset -c N` (or `N,M` for multiple cores)
-- Resource limits enforced via `systemd-run` (CPU quota and memory max)
-- When `--cpu-lmt-cores > 1`, uses multiple consecutive cores (e.g., 2 cores = cores 0,1 for JS)
-- Runs one language at a time (simplified from parallel execution)
-- Endpoints tested sequentially per language
+Query parameter parsing endpoint. Returns JSON if `?json=true`, otherwise plain text.
 
-**CPU Core Assignment:**
-- `--cpu-lmt-cores 0.5` → 1 core at 50% quota (core 0 for JS)
-- `--cpu-lmt-cores 1` → 1 full core (core 0 for JS)
-- `--cpu-lmt-cores 2` → 2 full cores (cores 0,1 for JS)
-- `--cpu-lmt-cores 4` → 4 full cores (cores 0,1,2,3 for JS)
+**Request:**
+```bash
+curl "http://localhost:3000/something?name=test&value=123"
+```
 
-### Performance
+**Response (plain text):**
+```
+Route: /something, Query: {"name":"test","value":"123"}
+```
 
-- **Efficient for large request counts**: Uses `xargs -P` for parallel execution instead of spawning thousands of subshells
-- **Handles 10000+ requests**: Optimized to avoid process overhead
-- **Live updates**: Table refreshes every 0.5 seconds with current progress
+**Request (JSON):**
+```bash
+curl "http://localhost:3000/something?name=test&json=true"
+```
+
+**Response (JSON):**
+```json
+{"route":"/something","query":{"name":"test","json":"true"}}
+```
+
+### POST `/something`
+
+POST endpoint that echoes the request body.
+
+**Request:**
+```bash
+curl -X POST http://localhost:3000/something \
+  -H "Content-Type: application/json" \
+  -d '{"hello":"world","test":123}'
+```
+
+**Response:**
+```json
+{"route":"/something","body":{"hello":"world","test":123}}
+```
+
+## Benchmark Tool
+
+The benchmark uses `wrk`, a modern HTTP benchmarking tool written in C. It's designed for high-performance testing and provides detailed latency statistics.
+
+### Usage
+
+```bash
+./benchmark.sh -l <lang> [OPTIONS]
+```
+
+### Options
+
+| Flag | Description | Default | Notes |
+|------|-------------|---------|-------|
+| `-l, --lang` | Language to benchmark | required | `js`, `py`, `go`, or `rust` |
+| `-e, --endpoint` | Endpoint(s) to test | `all` | `root`, `query`, `json`, `post`, or `all` |
+| `-c, --connections` | Concurrent connections | `50` | Number of simultaneous connections wrk maintains |
+| `-d, --duration` | Test duration (seconds) | `5` | How long to run each endpoint test |
+| `-t, --threads` | wrk threads | auto | Usually 1 thread per 50 connections (max 4) |
+| `--cpu` | CPU cores for server* | `1` | Limits server CPU usage (0.5 = half core) |
+| `--mem` | Memory limit for server* | `1G` | Maximum memory server can use |
+
+*Requires `systemd-run` (Linux). Without it, CPU/memory limits are ignored and a warning is shown.
+
+### How It Works
+
+1. **Server Startup**: Starts the specified language server with resource limits
+2. **Warmup**: Sends a single request to prime the server (JIT compilation, etc.)
+3. **Benchmark**: Runs `wrk` against each endpoint for the specified duration
+4. **Statistics**: Parses wrk output to extract latency percentiles and throughput
+5. **Resource Monitoring**: Tracks CPU and memory usage during the test
+6. **Cleanup**: Automatically stops the server and cleans up
+
+### Examples
+
+```bash
+# Quick test: Go server, default settings
+./benchmark.sh -l go
+
+# High-load test: JavaScript, 200 connections, 10 seconds
+./benchmark.sh -l js -c 200 -d 10
+
+# Single endpoint: Rust, root endpoint only, 50 connections
+./benchmark.sh -l rust -e root -c 50
+
+# Resource limits: Python with 2 CPU cores and 2GB RAM
+./benchmark.sh -l py --cpu 2 --mem 2G
+
+# Custom threads: Go with 4 wrk threads
+./benchmark.sh -l go -t 4 -c 200
+```
+
+### Understanding the Output
+
+The benchmark displays:
+- **Requests**: Total requests completed during the test duration
+- **Errors**: Failed requests (connection errors, timeouts, non-2xx responses)
+- **Req/s**: Average requests per second (throughput)
+- **Avg/P50/P90/P99/Max**: Latency statistics in milliseconds
+- **Server CPU/Memory**: Resource usage during the benchmark
+
+## Language Characteristics
+
+### Go
+
+**Strengths:**
+- **Goroutines**: Extremely lightweight (~2KB stack vs 2MB for OS threads)
+- **Built-in HTTP server**: Highly optimized, production-ready code
+- **Efficient memory allocation**: Zero-cost abstractions, minimal GC pressure
+- **Concurrent by default**: Automatically handles thousands of concurrent requests
+
+**Trade-offs:**
+- Requires Go runtime (larger binary size)
+- Garbage collector adds some overhead
+
+### JavaScript (Node.js)
+
+**Strengths:**
+- **V8 engine**: Highly optimized JIT compiler, competitive with compiled languages
+- **Event loop**: Non-blocking I/O, efficient for I/O-bound workloads
+- **Single-threaded**: No context switching overhead, no thread synchronization
+- **Mature ecosystem**: Years of optimization in production environments
+
+**Trade-offs:**
+- Higher memory usage due to V8 runtime
+- Single-threaded means CPU-bound tasks block the event loop
+- Interpreted language (though JIT helps significantly)
+
+### Rust
+
+**Strengths:**
+- **Zero-cost abstractions**: No GC, excellent for systems programming
+- **Memory safety**: Compile-time guarantees without runtime overhead
+- **Low memory usage**: Efficient resource utilization
+
+**Current Implementation Limitations:**
+- **Thread-per-request**: Each request spawns a new OS thread (high overhead)
+- **No async in stdlib**: Would need `tokio` or similar for better performance
+- **Thread overhead**: OS threads have ~2MB stack, expensive to create/destroy
+
+**Potential Improvements:**
+- With `tokio` async runtime, Rust could achieve much higher performance
+- Async/await would eliminate thread spawning overhead
+
+**Trade-offs:**
+- Current implementation uses blocking I/O with threads
+- Compilation time is slower than other languages
+- Steeper learning curve
+
+### Python
+
+**Strengths:**
+- **Easiest to write and maintain**: Readable, expressive syntax
+- **Excellent for rapid prototyping**: Fast development cycle
+- **Rich ecosystem**: Extensive libraries and frameworks
+- **Good enough for many applications**: Sufficient performance for typical web apps
+
+**Limitations:**
+- **Global Interpreter Lock (GIL)**: Prevents true parallelism, only one thread executes Python bytecode at a time
+- **Interpreted language**: No JIT compilation (unlike JavaScript)
+- **Thread overhead**: OS threads with GIL contention
+- **Dynamic typing**: Runtime type checking adds overhead
+
+**Trade-offs:**
+- GIL limits CPU-bound parallelism
+- Higher latency compared to compiled languages
+- Not suitable for high-throughput microservices requiring maximum performance
 
 ## Requirements
 
-- **Languages**: Node.js, Python 3, Go, Rust
-- **Tools**: `curl`, `xargs` (GNU coreutils)
-- **System**: 
-  - `taskset` (util-linux, for CPU pinning)
-  - `systemd-run` (for resource limits - CPU quota and memory max)
+### Languages
 
-## File Structure
+- **Node.js**: v14+ (for JavaScript server)
+- **Python**: 3.7+ (for Python server)
+- **Go**: 1.16+ (for Go server)
+- **Rust**: 1.50+ with `rustc` (for Rust server)
+
+### Tools
+
+- **wrk**: HTTP benchmarking tool
+  - Install: `apt install wrk` (Debian/Ubuntu) or `brew install wrk` (macOS)
+  - Required for running benchmarks
+- **curl**: HTTP client
+  - Usually pre-installed on Linux/macOS
+  - Used for functional testing
+
+### Optional (for Resource Limits)
+
+- **systemd-run**: Systemd service manager
+  - Usually pre-installed on modern Linux systems
+  - Required for `--cpu` and `--mem` options
+  - Without it, resource limits are ignored
+- **taskset**: CPU affinity tool
+  - Part of `util-linux` package
+  - Used for CPU core pinning (fallback without systemd)
+
+### Installation
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install nodejs python3 golang-go rustc wrk curl
+```
+
+**macOS:**
+```bash
+brew install node python go rust wrk
+# curl is pre-installed
+```
+
+**Verify installations:**
+```bash
+node --version
+python3 --version
+go version
+rustc --version
+wrk --version
+```
+
+## Architecture
+
+### Project Structure
 
 ```
 .
-├── server.js          # JavaScript server
-├── server.py          # Python server
-├── server.go          # Go server
-├── server.rs          # Rust server
-├── test.sh            # Functional test script
-├── benchmark.sh       # Benchmark orchestrator
-├── bench_lib.sh       # Generic benchmarking library
-├── server_config.sh   # Project-specific config
+├── server.js          # JavaScript server (Node.js event loop)
+├── server.py          # Python server (ThreadingMixIn)
+├── server.go          # Go server (goroutines)
+├── server.rs          # Rust server (OS threads)
+├── benchmark.sh       # Main benchmark orchestrator
+├── bench_lib.sh       # Benchmark library (wrk wrapper, stats parsing)
+├── server_config.sh   # Server configuration (ports, start/stop logic)
+├── test.sh            # Functional test suite
 └── README.md          # This file
 ```
+
+### How Benchmarking Works
+
+1. **benchmark.sh**: Main script that:
+   - Parses command-line arguments
+   - Starts the server with resource limits
+   - Waits for server to be ready
+   - Runs benchmarks for each endpoint
+   - Displays formatted results
+
+2. **bench_lib.sh**: Library functions for:
+   - Running `wrk` benchmarks
+   - Parsing wrk output (latency percentiles, throughput)
+   - Resource monitoring (CPU, memory)
+   - Port management
+
+3. **server_config.sh**: Server-specific logic:
+   - Language definitions (ports, names, CPU cores)
+   - Server startup commands
+   - Resource limit application
+   - Endpoint definitions
+
+### Resource Limits
+
+When `systemd-run` is available:
+- **CPU**: Uses `CPUQuota` to limit CPU usage (e.g., 50% = 0.5 cores)
+- **Memory**: Uses `MemoryMax` to cap memory usage
+- **CPU Pinning**: Uses `taskset` to pin server to specific CPU cores
+
+Without `systemd-run`:
+- Only CPU pinning works (via `taskset`)
+- CPU quota and memory limits are ignored
+- A warning is displayed
+
+## Troubleshooting
+
+### Server Won't Start
+
+**Port already in use:**
+```bash
+# Find and kill process on port
+lsof -ti :3000 | xargs kill -9
+```
+
+**Compilation errors:**
+- **Go**: Ensure `go` is in PATH
+- **Rust**: Check `rustc` is available (may need to fix rustup proxy issues)
+
+### Benchmark Shows 0 Requests
+
+- Server may not be ready - check server logs in `/tmp/*_server.log`
+- Connection refused - verify server is listening on correct port
+- Check firewall settings
+
+### Resource Limits Not Working
+
+- Verify `systemd-run` is installed: `which systemd-run`
+- On macOS, resource limits don't work (no systemd)
+- Check if running as user (systemd-run requires user session)
+
+### Rust Compilation Fails
+
+If you see "unknown proxy name: 'cursor'" error:
+- The script automatically finds rustc in `~/.rustup/toolchains/`
+- Or manually set: `export RUSTUP_TOOLCHAIN=stable`
+
+## Contributing
+
+This is a comparison project. To add a new language:
+
+1. Create `server.{ext}` implementing the three endpoints
+2. Add language to `server_config.sh` (port, name, core)
+3. Add startup logic in `server_start()` function
+4. Test with `./test.sh`
+5. Benchmark with `./benchmark.sh -l <lang>`
+
+## License
+
+This project is for educational and comparison purposes. Feel free to use and modify as needed.

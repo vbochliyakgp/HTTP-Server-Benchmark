@@ -1,132 +1,63 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════════
-# benchmark.sh - HTTP Server Benchmark Runner
-# ═══════════════════════════════════════════════════════════════════════════════
-#
-# Benchmarks a single server at a time with live-updating display.
-#
-# Usage: ./benchmark.sh -l <lang> [-e <endpoint>] [-c <concurrency>] <num_requests>
-#
+# benchmark.sh - High-Performance HTTP Server Benchmark using wrk
 # ═══════════════════════════════════════════════════════════════════════════════
 
-set -o pipefail
+set -euo pipefail
 
-# Load modules
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/bench_lib.sh"
 source "$SCRIPT_DIR/server_config.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Global State
+# State
 # ─────────────────────────────────────────────────────────────────────────────
 
-TEMP_DIR=""
 SERVER_PID=""
-FIRST_DRAW=true
-TABLE_START_LINE=0
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Cleanup
-# ─────────────────────────────────────────────────────────────────────────────
+TEMP_DIR=""
 
 cleanup() {
-    [[ -n "$SERVER_PID" ]] && kill "$SERVER_PID" 2>/dev/null
-    [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]] && rm -rf "$TEMP_DIR"
-    server_cleanup
     bench_show_cursor
+    [[ -n "$SERVER_PID" ]] && kill "$SERVER_PID" 2>/dev/null || true
+    [[ -d "$TEMP_DIR" ]] && rm -rf "$TEMP_DIR"
+    server_cleanup 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Display
+# Output Formatting
 # ─────────────────────────────────────────────────────────────────────────────
 
-print_table() {
-    local lang=$1 endpoints=$2 num=$3
-    local name=$(server_get_name "$lang")
-    local port=$(server_get_port "$lang")
-    
-    # Get current CPU/MEM
-    local pid=$(bench_find_pid_by_port "$port")
-    local cpu="0.00" mem="0"
-    if [[ -n "$pid" ]]; then
-        read cpu mem <<< "$(bench_get_resources "$pid")"
-    fi
-    
-    # Calculate total lines
-    local num_eps=$(echo "$endpoints" | wc -w)
-    local total_lines=$((5 + num_eps + 1))  # header(5) + rows + footer(1)
-    
-    if [[ "$FIRST_DRAW" == "true" ]]; then
-        FIRST_DRAW=false
-        # Save starting position
-        tput sc 2>/dev/null
-    else
-        # Restore to saved position
-        tput rc 2>/dev/null
-    fi
-    
-    # Header
-    printf "%-12s  CPU: %-6s  MEM: %-4s MB\n" "$name" "$cpu" "$mem"
-    echo "┌────────────┬────────┬────────┬──────────┬────────┬────────┬────────┬────────┬────────┐"
-    echo "│ Endpoint   │   Done │ Failed │   Req/s  │ Min ms │ Avg ms │ P50 ms │ P95 ms │ Max ms │"
-    echo "├────────────┼────────┼────────┼──────────┼────────┼────────┼────────┼────────┼────────┤"
-    
-    for ep_name in $endpoints; do
-        local status_file="$TEMP_DIR/status_${ep_name}.txt"
-        local data_file="$TEMP_DIR/data_${ep_name}.txt"
-        local final_file="$TEMP_DIR/final_${ep_name}.txt"
-        
-        local status=$(cat "$status_file" 2>/dev/null || echo "pending")
-        
-        if [[ "$status" == "done" ]]; then
-            local stats=$(cat "$final_file" 2>/dev/null || echo "0 0 0 0 0 0 0 0")
-            read done_count failed rps min avg p50 p95 max <<< "$stats"
-            printf "│ %-10s │ %6s │ %6s │ %8s │ %6s │ %6s │ %6s │ %6s │ %6s │\n" \
-                "$ep_name" "$done_count" "$failed" "$rps" "$min" "$avg" "$p50" "$p95" "$max"
-        elif [[ "$status" == "running" ]]; then
-            local count=$(wc -l < "$data_file" 2>/dev/null || echo 0)
-            printf "│ %-10s │ %6s │ %6s │ %8s │ %6s │ %6s │ %6s │ %6s │ %6s │\n" \
-                "$ep_name" "$count" "-" "-" "-" "-" "-" "-" "-"
-        else
-            printf "│ %-10s │ %6s │ %6s │ %8s │ %6s │ %6s │ %6s │ %6s │ %6s │\n" \
-                "$ep_name" "-" "-" "-" "-" "-" "-" "-" "-"
-        fi
-    done
-    
-    echo "└────────────┴────────┴────────┴──────────┴────────┴────────┴────────┴────────┴────────┘"
-    
-    # Clear any remaining lines below
-    tput ed 2>/dev/null
+# Colors (disable if not terminal)
+if [[ -t 1 ]]; then
+    BOLD='\033[1m'; DIM='\033[2m'; RESET='\033[0m'
+    GREEN='\033[32m'; YELLOW='\033[33m'; CYAN='\033[36m'; RED='\033[31m'
+else
+    BOLD=''; DIM=''; RESET=''; GREEN=''; YELLOW=''; CYAN=''; RED=''
+fi
+
+header() { echo -e "\n${BOLD}$1${RESET}"; }
+info()   { echo -e "${CYAN}$1${RESET}"; }
+ok()     { echo -e "${GREEN}✓${RESET} $1"; }
+err()    { echo -e "${RED}✗${RESET} $1"; }
+
+print_table_header() {
+    echo "┌────────────┬───────────┬────────┬───────────┬─────────┬─────────┬─────────┬─────────┬─────────┐"
+    echo "│ Endpoint   │  Requests │ Errors │   Req/s   │ Avg(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │"
+    echo "├────────────┼───────────┼────────┼───────────┼─────────┼─────────┼─────────┼─────────┼─────────┤"
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Benchmark Logic
-# ─────────────────────────────────────────────────────────────────────────────
+print_table_row() {
+    printf "│ %-10s │ %9s │ %6s │ %9s │ %7s │ %7s │ %7s │ %7s │ %7s │\n" "$@"
+}
 
-run_endpoint_benchmark() {
-    local port=$1 ep_name=$2 num=$3 conc=$4
-    
-    local ep_def=$(server_get_endpoint "$ep_name")
-    local path=$(server_parse_endpoint "$ep_def" "path")
-    local method=$(server_parse_endpoint "$ep_def" "method")
-    local body=$(server_parse_endpoint "$ep_def" "body")
-    local url="http://localhost:$port$path"
-    
-    local data_file="$TEMP_DIR/data_${ep_name}.txt"
-    local final_file="$TEMP_DIR/final_${ep_name}.txt"
-    local status_file="$TEMP_DIR/status_${ep_name}.txt"
-    
-    echo "running" > "$status_file"
-    
-    local start=$(date +%s%N)
-    bench_run_requests "$url" "$method" "$body" "$num" "$conc" "$data_file"
-    local end=$(date +%s%N)
-    local total_ms=$(( (end - start) / 1000000 ))
-    [[ $total_ms -lt 1 ]] && total_ms=1
-    
-    bench_calc_stats "$data_file" "$total_ms" > "$final_file"
-    echo "done" > "$status_file"
+print_table_footer() {
+    echo "└────────────┴───────────┴────────┴───────────┴─────────┴─────────┴─────────┴─────────┴─────────┘"
+}
+
+# Format large numbers with commas
+fmt_num() {
+    printf "%'d" "${1:-0}" 2>/dev/null || echo "${1:-0}"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -135,143 +66,169 @@ run_endpoint_benchmark() {
 
 usage() {
     cat << 'EOF'
-Usage: ./benchmark.sh [OPTIONS] <num_requests>
+Usage: ./benchmark.sh -l <lang> [OPTIONS]
+
+Required:
+  -l, --lang         Language: js, py, go, rust
 
 Options:
-  -l, --lang         Language: js, py, go, rust (required)
   -e, --endpoint     Endpoint: root, query, json, post, or "all" (default: all)
-  -c, --concurrency  Concurrent requests (default: 1)
-  --cpu-lmt-cores    Number of CPU cores (default: 0.5)
-  --mem-lmt          Memory limit (e.g., 1G, 512M) (default: 1G)
+  -c, --connections  Concurrent connections (default: 50)
+  -d, --duration     Duration per endpoint in seconds (default: 5)
+  -t, --threads      wrk threads (default: auto-calculated)
+  --cpu              CPU cores for server (default: 1)
+  --mem              Memory limit for server (default: 1G)
   -h, --help         Show this help
 
 Examples:
-  ./benchmark.sh -l js 100                              # JS server, 100 sequential requests
-  ./benchmark.sh -l go -c 10 500                        # Go server, 500 requests, 10 concurrent
-  ./benchmark.sh -l rust -e root -c 5 200               # Rust, root endpoint only, 5 concurrent
-  ./benchmark.sh -l js --cpu-lmt-cores 2 --mem-lmt 2G 1000  # 2 cores, 2GB RAM
+  ./benchmark.sh -l js                        # JS, 50 connections, 5s
+  ./benchmark.sh -l go -c 200 -d 10           # Go, 200 connections, 10s
+  ./benchmark.sh -l py --cpu 2 --mem 2G       # Python, 2 cores, 2GB RAM
+  ./benchmark.sh -l rust -e root -c 100       # Rust, root endpoint only
 EOF
     exit 0
 }
 
 main() {
-    local LANG="" ENDPOINT="all" CONC=1 NUM=""
-    local CPU_CORES="" MEMORY_LIMIT=""
+    local lang="" endpoint="all" conns=50 duration=5 threads=""
+    local cpu_cores="1" mem_limit="1G"
     
-    # Parse arguments
+    # Parse args
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -l|--lang) LANG="$2"; shift 2 ;;
-            -e|--endpoint) ENDPOINT="$2"; shift 2 ;;
-            -c|--concurrency) CONC="$2"; shift 2 ;;
-            --cpu-lmt-cores) CPU_CORES="$2"; shift 2 ;;
-            --mem-lmt) MEMORY_LIMIT="$2"; shift 2 ;;
-            -h|--help) usage ;;
-            -*) echo "Unknown option: $1"; exit 1 ;;
-            *) NUM="$1"; shift ;;
+            -l|--lang)        lang="$2"; shift 2 ;;
+            -e|--endpoint)    endpoint="$2"; shift 2 ;;
+            -c|--connections) conns="$2"; shift 2 ;;
+            -d|--duration)    duration="$2"; shift 2 ;;
+            -t|--threads)     threads="$2"; shift 2 ;;
+            --cpu)            cpu_cores="$2"; shift 2 ;;
+            --mem)            mem_limit="$2"; shift 2 ;;
+            -h|--help)        usage ;;
+            *)                shift ;;
         esac
     done
     
     # Validate
-    [[ -z "$LANG" ]] && { echo "Error: -l/--lang is required"; usage; }
-    [[ -z "$NUM" ]] && { echo "Error: num_requests is required"; usage; }
+    [[ -z "$lang" ]] && { err "Missing -l/--lang"; usage; }
+    server_is_valid_lang "$lang" || { err "Invalid language: $lang"; exit 1; }
     
-    if ! server_is_valid_lang "$LANG"; then
-        echo "Error: Invalid language '$LANG'. Use: js, py, go, rust"
-        exit 1
+    # Auto-calculate threads (1 per 50 connections, max 4)
+    if [[ -z "$threads" ]]; then
+        threads=$(( (conns + 49) / 50 ))
+        [[ $threads -gt 4 ]] && threads=4
+        [[ $threads -lt 1 ]] && threads=1
     fi
     
     # Build endpoint list
-    local ep_list=""
-    if [[ "$ENDPOINT" == "all" ]]; then
+    local -a endpoints=()
+    if [[ "$endpoint" == "all" ]]; then
         for ep in "${SERVER_ENDPOINTS[@]}"; do
-            ep_list="$ep_list $(server_parse_endpoint "$ep" "name")"
+            endpoints+=("$(server_parse_endpoint "$ep" "name")")
         done
     else
-        ep_list="$ENDPOINT"
+        endpoints=("$endpoint")
     fi
-    ep_list=$(echo "$ep_list" | xargs)  # Trim
-    
-    # "all" concurrency means all at once
-    [[ "$CONC" == "all" ]] && CONC=$NUM
     
     # Setup
     TEMP_DIR=$(mktemp -d)
-    for ep_name in $ep_list; do
-        echo "pending" > "$TEMP_DIR/status_${ep_name}.txt"
-        > "$TEMP_DIR/data_${ep_name}.txt"
-    done
+    local port=$(server_get_port "$lang")
+    local name=$(server_get_name "$lang")
+    local cpu_quota=$(awk "BEGIN {printf \"%.0f\", $cpu_cores * 100}")
     
-    local port=$(server_get_port "$LANG")
-    local name=$(server_get_name "$LANG")
-    local core=$(server_get_core "$LANG")
+    # Header
+    echo ""
+    echo -e "${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}"
+    echo -e "${BOLD} wrk Benchmark: $name${RESET}"
+    echo -e "${BOLD}═══════════════════════════════════════════════════════════════════════${RESET}"
     
-    # Start server with resource limits
-    # Convert cores to percentage for systemd (1 core = 100%, 0.5 core = 50%, etc.)
-    local cpu_quota=""
-    if [[ -n "$CPU_CORES" ]]; then
-        # Multiply by 100 to get percentage (e.g., 2 cores = 200%, 0.5 = 50%)
-        cpu_quota=$(awk "BEGIN {printf \"%.0f\", $CPU_CORES * 100}")
+    # Check if resource limits are available
+    local limits_available=false
+    if command -v systemd-run &>/dev/null; then
+        limits_available=true
     fi
     
-    local cpu_info="CPU core $core"
-    [[ -n "$CPU_CORES" ]] && cpu_info="$cpu_info, ${CPU_CORES} core(s)"
-    [[ -n "$MEMORY_LIMIT" ]] && cpu_info="$cpu_info, ${MEMORY_LIMIT} RAM"
-    echo "🚀 Starting $name server on port $port ($cpu_info)..."
-    SERVER_PID=$(server_start "$LANG" "$TEMP_DIR/server.log" "$cpu_quota" "$MEMORY_LIMIT")
+    # Start server
+    info "\n🚀 Starting $name server..."
+    if $limits_available; then
+        info "   Port: $port | CPU: ${cpu_cores} core(s) | RAM: $mem_limit"
+    else
+        info "   Port: $port | CPU/RAM limits: N/A (systemd-run not found)"
+    fi
+    
+    SERVER_PID=$(server_start "$lang" "$TEMP_DIR/server.log" "$cpu_quota" "$mem_limit")
     
     if [[ -z "$SERVER_PID" ]]; then
-        echo "❌ Failed to start server"
-        cat "$TEMP_DIR/server.log" 2>/dev/null
+        err "Failed to start server"
+        [[ -f "$TEMP_DIR/server.log" ]] && cat "$TEMP_DIR/server.log"
         exit 1
     fi
     
-    # Wait for ready
-    if ! server_wait_ready "$port" 10; then
-        echo "❌ Server failed to start"
-        cat "$TEMP_DIR/server.log" 2>/dev/null
+    if ! server_wait_ready "$port" 30; then
+        err "Server not ready after 30 retries"
+        [[ -f "$TEMP_DIR/server.log" ]] && cat "$TEMP_DIR/server.log"
         exit 1
     fi
     
-    # Get actual PID (after taskset)
     SERVER_PID=$(bench_find_pid_by_port "$port")
-    echo "   PID: $SERVER_PID"
+    ok "Server running (PID: $SERVER_PID)"
     
-    local mode="sequential"
-    [[ $CONC -gt 1 ]] && mode="concurrent (×$CONC)"
-    [[ $CONC -eq $NUM ]] && mode="all concurrent"
+    # Config summary
+    info "\n📊 Benchmark Config"
+    info "   Connections: $conns | Threads: $threads | Duration: ${duration}s/endpoint"
+    info "   Endpoints: ${endpoints[*]}"
     
-    echo ""
-    echo "📊 Benchmark: $NUM requests per endpoint, $mode"
-    echo "   Endpoints: $ep_list"
-    echo ""
+    # Warmup
+    info "\n⏳ Warming up..."
+    bench_warmup "http://localhost:$port/"
+    sleep 0.5
     
-    bench_hide_cursor
+    # Results storage
+    local total_reqs=0 total_errs=0 total_rps=0
     
-    # Start benchmark in background
-    (
-        for ep_name in $ep_list; do
-            run_endpoint_benchmark "$port" "$ep_name" "$NUM" "$CONC"
-        done
-    ) &
-    local bench_pid=$!
+    # Run benchmarks
+    header "📈 Results"
+    print_table_header
     
-    # Live update loop
-    print_table "$LANG" "$ep_list" "$NUM"
-    
-    while kill -0 "$bench_pid" 2>/dev/null; do
-        sleep 0.5
-        print_table "$LANG" "$ep_list" "$NUM"
+    for ep_name in "${endpoints[@]}"; do
+        local ep_def=$(server_get_endpoint "$ep_name")
+        local path=$(server_parse_endpoint "$ep_def" "path")
+        local method=$(server_parse_endpoint "$ep_def" "method")
+        local body=$(server_parse_endpoint "$ep_def" "body")
+        local url="http://localhost:$port$path"
+        
+        # Run benchmark
+        local result=$(bench_wrk "$url" "$method" "$body" "$duration" "$conns" "$threads")
+        read reqs errs rps avg p50 p90 p99 maxl <<< "$result"
+        
+        # Accumulate totals
+        total_reqs=$((total_reqs + ${reqs%.*}))
+        total_errs=$((total_errs + ${errs%.*}))
+        total_rps=$(awk "BEGIN {print $total_rps + $rps}")
+        
+        # Format and print
+        print_table_row "$ep_name" "$(fmt_num ${reqs%.*})" "${errs%.*}" \
+            "$(printf "%.1f" "$rps")" \
+            "$(printf "%.2f" "$avg")" \
+            "$(printf "%.2f" "$p50")" \
+            "$(printf "%.2f" "$p90")" \
+            "$(printf "%.2f" "$p99")" \
+            "$(printf "%.2f" "$maxl")"
     done
     
-    wait "$bench_pid" 2>/dev/null
+    print_table_footer
     
-    # Final draw
-    print_table "$LANG" "$ep_list" "$NUM"
+    # Summary
+    local res=$(bench_get_resources "$SERVER_PID")
+    read cpu mem <<< "$res"
     
-    bench_show_cursor
-    echo ""
-    echo "✅ Benchmark complete!"
+    header "📊 Summary"
+    echo "   Total Requests: $(fmt_num $total_reqs)"
+    echo "   Total Errors:   $(fmt_num $total_errs)"
+    echo "   Avg Throughput: $(printf "%.1f" "$total_rps") req/s (sum across endpoints)"
+    echo "   Server CPU:     ${cpu}%"
+    echo "   Server Memory:  ${mem} MB"
+    
+    echo -e "\n${GREEN}✅ Benchmark complete!${RESET}\n"
 }
 
 main "$@"
