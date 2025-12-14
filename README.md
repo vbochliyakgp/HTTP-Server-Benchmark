@@ -12,6 +12,8 @@ This project implements identical HTTP servers in five different languages to co
 
 All servers are benchmarked using `wrk`, a high-performance HTTP benchmarking tool, under identical conditions to ensure fair comparison.
 
+> **📊 See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for detailed analysis, insights, and reasoning behind the performance differences.**
+
 ## Quick Start
 
 ### Run Functional Tests
@@ -121,8 +123,8 @@ Run benchmarks to see performance characteristics of each language:
 |----------|-------|----------------|----------|-------|
 | **Go** | Goroutines | Lightweight coroutines | ~2KB stack | Near-zero overhead, handles millions of concurrent requests |
 | **JavaScript** | Event Loop | Single-threaded async I/O | Minimal | Non-blocking I/O, efficient for I/O-bound workloads |
-| **Rust** | OS Threads | One thread per request | ~2MB stack | High overhead (~3ms per thread spawn), no async in stdlib |
-| **C++** | OS Threads | `std::thread` per request | ~2MB stack | High overhead, manual thread management |
+| **Rust** | Thread Pool | 8 worker threads + mpsc | ~16MB total | Reuses threads, no spawn overhead per request |
+| **C++** | Thread Pool | 8 workers + condition_variable | ~16MB total | Reuses threads, mutex-based work queue |
 | **Python** | ThreadingMixIn | OS threads with GIL | ~2MB stack | GIL prevents true parallelism, context switching overhead |
 
 ### Understanding the Metrics
@@ -322,17 +324,22 @@ The benchmark displays:
 - **Memory safety**: Compile-time guarantees without runtime overhead
 - **Low memory usage**: Efficient resource utilization
 
-**Current Implementation Limitations:**
-- **Thread-per-request**: Each request spawns a new OS thread (high overhead)
-- **No async in stdlib**: Would need `tokio` or similar for better performance
-- **Thread overhead**: OS threads have ~2MB stack, expensive to create/destroy
+**Current Implementation:**
+- **Thread pool**: 8 worker threads with `mpsc` channel for task distribution
+- **Blocking I/O**: Uses standard `TcpStream` (no async)
+- **Work stealing**: Efficient task distribution via shared receiver
+
+**Performance Characteristics:**
+- ~111K req/s throughput
+- Best P50 latency (0.31ms)
+- Lowest memory usage (2MB)
 
 **Potential Improvements:**
-- With `tokio` async runtime, Rust could achieve much higher performance
-- Async/await would eliminate thread spawning overhead
+- With `tokio` async runtime, Rust could achieve 200K+ req/s
+- Async/await would eliminate thread pool bottleneck
 
 **Trade-offs:**
-- Current implementation uses blocking I/O with threads
+- Thread pool limits true parallelism to 8 concurrent requests
 - Compilation time is slower than other languages
 - Steeper learning curve
 
@@ -345,15 +352,19 @@ The benchmark displays:
 - **Standard library**: Rich STL for containers and algorithms
 
 **Current Implementation:**
-- **Thread-per-request**: Uses `std::thread` for concurrent requests
+- **Thread pool**: 8 worker threads with `std::condition_variable` for synchronization
 - **POSIX sockets**: Direct system calls for maximum control
 - **Manual HTTP parsing**: Full control over request/response handling
 
+**Performance Characteristics:**
+- ~90K req/s throughput
+- Low memory usage (4MB)
+- Consistent latency on simple requests
+
 **Trade-offs:**
-- Thread-per-request has overhead (~2MB stack per thread)
+- Thread pool mutex contention under high load
 - Manual memory management requires careful coding
-- Compilation time can be slower
-- More verbose than higher-level languages
+- `std::ostringstream` slow for JSON serialization
 
 ### Python
 
@@ -435,13 +446,14 @@ wrk --version
 ├── server.js          # JavaScript server (Node.js event loop)
 ├── server.py          # Python server (ThreadingMixIn)
 ├── server.go          # Go server (goroutines)
-├── server.rs          # Rust server (OS threads)
-├── server.cpp         # C++ server (OS threads)
+├── server.rs          # Rust server (thread pool)
+├── server.cpp         # C++ server (thread pool)
 ├── benchmark.sh       # Main benchmark orchestrator
 ├── bench_lib.sh       # Benchmark library (wrk wrapper, stats parsing)
 ├── server_config.sh   # Server configuration (ports, start/stop logic)
 ├── test.sh            # Functional test suite
 ├── compare_endpoint.sh # Compare specific endpoint across all languages
+├── BENCHMARK_RESULTS.md # Detailed analysis and insights
 └── README.md          # This file
 ```
 

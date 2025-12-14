@@ -1,14 +1,73 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::collections::HashMap;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+
+// Thread pool for handling connections
+struct ThreadPool {
+    workers: Vec<thread::JoinHandle<()>>,
+    sender: Option<mpsc::Sender<TcpStream>>,
+}
+
+impl ThreadPool {
+    fn new(size: usize) -> ThreadPool {
+        let (sender, receiver) = mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+        
+        let mut workers = Vec::with_capacity(size);
+        
+        for _ in 0..size {
+            let receiver = Arc::clone(&receiver);
+            let worker = thread::spawn(move || loop {
+                let stream = {
+                    let receiver = receiver.lock().unwrap();
+                    receiver.recv()
+                };
+                
+                match stream {
+                    Ok(stream) => handle_client(stream),
+                    Err(_) => break,  // Channel closed, exit worker
+                }
+            });
+            workers.push(worker);
+        }
+        
+        ThreadPool {
+            workers,
+            sender: Some(sender),
+        }
+    }
+    
+    fn execute(&self, stream: TcpStream) {
+        if let Some(ref sender) = self.sender {
+            sender.send(stream).unwrap_or_else(|_| {
+                eprintln!("Failed to send stream to worker");
+            });
+        }
+    }
+}
+
+impl Drop for ThreadPool {
+    fn drop(&mut self) {
+        drop(self.sender.take());
+        for worker in self.workers.drain(..) {
+            let _ = worker.join();
+        }
+    }
+}
 
 fn main() {
     let listener = TcpListener::bind("0.0.0.0:3003").unwrap();
+    listener.set_nonblocking(false).unwrap();
     println!("Rust server running on :3003");
-
+    
+    // Create thread pool with fixed number of worker threads
+    // Using 8 threads as a good default (can handle many concurrent connections)
+    let pool = ThreadPool::new(8);
+    
     for stream in listener.incoming().flatten() {
-        thread::spawn(move || handle_client(stream));
+        pool.execute(stream);
     }
 }
 
@@ -23,7 +82,7 @@ fn handle_client(stream: TcpStream) {
         return;
     }
 
-    let parts: Vec<&str> = request_line.split_whitespace().collect();
+    let parts: Vec<&str> = request_line.trim().split_whitespace().collect();
     if parts.len() < 2 {
         return;
     }
@@ -93,12 +152,7 @@ fn make_response(code: u16, body: &str, content_type: &str) -> String {
         _ => "Error",
     };
     format!(
-        "HTTP/1.1 {} {}\r\n\
-         Content-Type: {}\r\n\
-         Content-Length: {}\r\n\
-         Connection: close\r\n\
-         \r\n\
-         {}",
+        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         code, status, content_type, body.len(), body
     )
 }

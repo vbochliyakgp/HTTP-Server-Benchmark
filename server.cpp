@@ -3,6 +3,10 @@
 #include <sstream>
 #include <map>
 #include <thread>
+#include <vector>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -11,12 +15,71 @@
 #include <algorithm>
 #include <cerrno>
 #include <stdexcept>
+#include <memory>
+#include <functional>
+
+// Forward declaration
+class HTTPServer;
+
+class ThreadPool {
+private:
+    std::vector<std::thread> workers;
+    std::queue<int> tasks;
+    std::mutex queue_mutex;
+    std::condition_variable condition;
+    bool stop;
+    std::function<void(int)> handler;
+
+public:
+    ThreadPool(size_t num_threads, std::function<void(int)> handler_func) : stop(false), handler(handler_func) {
+        for (size_t i = 0; i < num_threads; ++i) {
+            workers.emplace_back([this] {
+                while (true) {
+                    int client_socket;
+                    {
+                        std::unique_lock<std::mutex> lock(queue_mutex);
+                        condition.wait(lock, [this] { return stop || !tasks.empty(); });
+                        
+                        if (stop && tasks.empty()) {
+                            return;
+                        }
+                        
+                        client_socket = tasks.front();
+                        tasks.pop();
+                    }
+                    
+                    handler(client_socket);
+                }
+            });
+        }
+    }
+    
+    void enqueue(int client_socket) {
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            tasks.push(client_socket);
+        }
+        condition.notify_one();
+    }
+    
+    ~ThreadPool() {
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            stop = true;
+        }
+        condition.notify_all();
+        for (std::thread &worker : workers) {
+            worker.join();
+        }
+    }
+};
 
 class HTTPServer {
 private:
     int server_fd;
     struct sockaddr_in address;
     int port = 3004;
+    std::unique_ptr<ThreadPool> pool;
 
     std::string urlDecode(const std::string& str) {
         std::string result;
@@ -185,15 +248,43 @@ private:
         else if (method == "POST" && route == "/something") {
             std::string body;
             if (contentLength > 0) {
-                body.resize(contentLength);
-                if (!readExact(client_socket, &body[0], contentLength)) {
-                    // Failed to read body, send error response
-                    response = makeResponse(400, "Bad Request", "text/plain");
+                // Check if body is already in the buffer (after headers)
+                // Find the end of headers in the original request
+                size_t headerEnd = request.find("\r\n\r\n");
+                if (headerEnd != std::string::npos) {
+                    headerEnd += 4;  // Skip past \r\n\r\n
+                    size_t bodyInBuffer = request.length() - headerEnd;
+                    
+                    if (bodyInBuffer >= static_cast<size_t>(contentLength)) {
+                        // Entire body is already in buffer
+                        body = request.substr(headerEnd, contentLength);
+                    } else {
+                        // Partial body in buffer, need to read more
+                        body = request.substr(headerEnd);
+                        size_t remaining = contentLength - body.length();
+                        if (remaining > 0) {
+                            std::string moreBody;
+                            moreBody.resize(remaining);
+                            if (readExact(client_socket, &moreBody[0], remaining)) {
+                                body += moreBody;
+                            } else {
+                                response = makeResponse(400, "Bad Request", "text/plain");
+                                goto send_response;
+                            }
+                        }
+                    }
                 } else {
-                    std::ostringstream json;
-                    json << "{\"route\":\"/something\",\"body\":" << (body.empty() ? "{}" : body) << "}";
-                    response = makeResponse(200, json.str(), "application/json");
+                    // No header end found, try reading from socket
+                    body.resize(contentLength);
+                    if (!readExact(client_socket, &body[0], contentLength)) {
+                        response = makeResponse(400, "Bad Request", "text/plain");
+                        goto send_response;
+                    }
                 }
+                
+                std::ostringstream json;
+                json << "{\"route\":\"/something\",\"body\":" << (body.empty() ? "{}" : body) << "}";
+                response = makeResponse(200, json.str(), "application/json");
             } else {
                 std::ostringstream json;
                 json << "{\"route\":\"/something\",\"body\":{}}";
@@ -203,6 +294,8 @@ private:
         else {
             response = makeResponse(404, "Not Found", "text/plain");
         }
+        
+        send_response:
 
         // Send response with error handling
         if (!sendAll(client_socket, response.c_str(), response.length())) {
@@ -234,12 +327,18 @@ public:
             exit(1);
         }
 
-        if (listen(server_fd, 10) < 0) {
+        if (listen(server_fd, 128) < 0) {
             std::cerr << "Listen failed\n";
             exit(1);
         }
 
         std::cout << "C++ server running on :" << port << std::endl;
+        
+        // Create thread pool with 8 worker threads
+        // Use lambda to bind handleClient method
+        pool = std::make_unique<ThreadPool>(8, [this](int socket) {
+            this->handleClient(socket);
+        });
     }
 
     void run() {
@@ -251,7 +350,8 @@ public:
                 continue;
             }
 
-            std::thread(&HTTPServer::handleClient, this, client_socket).detach();
+            // Enqueue task to thread pool instead of spawning new thread
+            pool->enqueue(client_socket);
         }
     }
 };
