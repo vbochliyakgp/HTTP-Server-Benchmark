@@ -43,6 +43,63 @@ Benchmark a specific language:
 ./benchmark.sh -l rust -e root -c 100
 ```
 
+### Compare Endpoint Across All Languages
+
+Test a specific endpoint across all languages for comparison:
+
+```bash
+# Test root endpoint on all languages (100 connections, 5 seconds each)
+for lang in js py go rust cpp; do
+    echo "=== Testing $lang ==="
+    ./benchmark.sh -l $lang -e root -c 100 -d 5
+    echo ""
+done
+
+# Test POST endpoint on all languages
+for lang in js py go rust cpp; do
+    echo "=== Testing $lang POST ==="
+    ./benchmark.sh -l $lang -e post -c 100 -d 5
+    echo ""
+done
+
+# Test query endpoint with JSON response
+for lang in js py go rust cpp; do
+    echo "=== Testing $lang JSON ==="
+    ./benchmark.sh -l $lang -e json -c 100 -d 5
+    echo ""
+done
+```
+
+**Quick comparison script** - Save as `compare_endpoint.sh`:
+
+```bash
+#!/bin/bash
+ENDPOINT=${1:-root}  # Default to 'root' if not specified
+CONNS=${2:-100}
+DURATION=${3:-5}
+
+echo "════════════════════════════════════════════════════════════════"
+echo " Comparing $ENDPOINT endpoint across all languages"
+echo " Config: $CONNS connections, ${DURATION}s duration"
+echo "════════════════════════════════════════════════════════════════"
+echo ""
+
+for lang in js py go rust cpp; do
+    ./benchmark.sh -l $lang -e $ENDPOINT -c $CONNS -d $DURATION 2>&1 | \
+        grep -E "(wrk Benchmark|Endpoint|root|query|json|post|Req/s|Avg\(ms\)|Server CPU|Server Memory|✅)" | \
+        head -8
+    echo ""
+done
+```
+
+Usage:
+```bash
+chmod +x compare_endpoint.sh
+./compare_endpoint.sh root      # Compare root endpoint
+./compare_endpoint.sh post 200  # Compare POST with 200 connections
+./compare_endpoint.sh json 50 3 # Compare JSON endpoint, 50 conns, 3s
+```
+
 ## Performance Testing
 
 **Test Methodology:**
@@ -204,6 +261,11 @@ The benchmark uses `wrk`, a modern HTTP benchmarking tool written in C. It's des
 
 # Custom threads: Go with 4 wrk threads
 ./benchmark.sh -l go -t 4 -c 200
+
+# Compare specific endpoint across all languages
+for lang in js py go rust cpp; do
+    ./benchmark.sh -l $lang -e root -c 100 -d 5
+done
 ```
 
 ### Understanding the Output
@@ -368,6 +430,7 @@ wrk --version
 ├── bench_lib.sh       # Benchmark library (wrk wrapper, stats parsing)
 ├── server_config.sh   # Server configuration (ports, start/stop logic)
 ├── test.sh            # Functional test suite
+├── compare_endpoint.sh # Compare specific endpoint across all languages
 └── README.md          # This file
 ```
 
