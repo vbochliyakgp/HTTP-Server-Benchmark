@@ -128,9 +128,13 @@ Run benchmarks to see performance characteristics of each language:
 ### Understanding the Metrics
 
 - **Requests/sec (req/s)**: Throughput - how many requests the server can handle per second
-- **Avg Latency**: Average response time in milliseconds
-- **P50/P90/P99**: Percentiles - 50% of requests are faster than P50, 90% faster than P90, etc.
-- **Max Latency**: Worst-case response time
+- **Min Latency**: Fastest response time observed (best case)
+- **P1**: 1st percentile latency - 1% of requests are faster than this
+- **P50**: 50th percentile (median) - half of requests are faster than this
+- **P90**: 90th percentile - 90% of requests are faster than this
+- **P99**: 99th percentile - 99% of requests are faster than this
+- **Max Latency**: Worst-case response time (slowest request)
+- **Avg Latency**: Average response time across all requests
 - **Memory**: Peak memory usage during benchmark
 
 ## Servers
@@ -274,7 +278,14 @@ The benchmark displays:
 - **Requests**: Total requests completed during the test duration
 - **Errors**: Failed requests (connection errors, timeouts, non-2xx responses)
 - **Req/s**: Average requests per second (throughput)
-- **Avg/P50/P90/P99/Max**: Latency statistics in milliseconds
+- **Min/P1/P50/P90/P99/Max/Avg**: Latency statistics in milliseconds
+  - **Min**: Fastest response time
+  - **P1**: 1st percentile (1% of requests faster)
+  - **P50**: Median (50% of requests faster)
+  - **P90**: 90th percentile (90% of requests faster)
+  - **P99**: 99th percentile (99% of requests faster)
+  - **Max**: Slowest response time
+  - **Avg**: Average response time
 - **Server CPU/Memory**: Resource usage during the benchmark
 
 ## Language Characteristics

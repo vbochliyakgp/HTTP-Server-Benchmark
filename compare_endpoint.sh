@@ -38,7 +38,7 @@ for lang in js py go rust cpp; do
     echo " Testing: $lang"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     ./benchmark.sh -l $lang -e $ENDPOINT -c $CONNS -d $DURATION 2>&1 | \
-        grep -E "(wrk Benchmark|Endpoint|$ENDPOINT|Req/s|Avg\(ms\)|P50\(ms\)|P90\(ms\)|Server CPU|Server Memory|✅)" | \
+        grep -E "(wrk Benchmark|Endpoint|$ENDPOINT|Req/s|Min\(ms\)|P1\(ms\)|P50\(ms\)|P90\(ms\)|P99\(ms\)|Max\(ms\)|Avg\(ms\)|Server CPU|Server Memory|✅)" | \
         head -10
     echo ""
 done

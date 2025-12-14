@@ -42,17 +42,17 @@ ok()     { echo -e "${GREEN}✓${RESET} $1"; }
 err()    { echo -e "${RED}✗${RESET} $1"; }
 
 print_table_header() {
-    echo "┌────────────┬───────────┬────────┬───────────┬─────────┬─────────┬─────────┬─────────┬─────────┐"
-    echo "│ Endpoint   │  Requests │ Errors │   Req/s   │ Avg(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │"
-    echo "├────────────┼───────────┼────────┼───────────┼─────────┼─────────┼─────────┼─────────┼─────────┤"
+    echo "┌────────────┬───────────┬────────┬───────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┬─────────┐"
+    echo "│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │"
+    echo "├────────────┼───────────┼────────┼───────────┼─────────┼─────────┼─────────┼─────────┼─────────┼─────────┼─────────┤"
 }
 
 print_table_row() {
-    printf "│ %-10s │ %9s │ %6s │ %9s │ %7s │ %7s │ %7s │ %7s │ %7s │\n" "$@"
+    printf "│ %-10s │ %9s │ %6s │ %9s │ %7s │ %7s │ %7s │ %7s │ %7s │ %7s │ %7s │\n" "$@"
 }
 
 print_table_footer() {
-    echo "└────────────┴───────────┴────────┴───────────┴─────────┴─────────┴─────────┴─────────┴─────────┘"
+    echo "└────────────┴───────────┴────────┴───────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┴─────────┘"
 }
 
 # Format large numbers with commas
@@ -198,21 +198,24 @@ main() {
         
         # Run benchmark
         local result=$(bench_wrk "$url" "$method" "$body" "$duration" "$conns" "$threads")
-        read reqs errs rps avg p50 p90 p99 maxl <<< "$result"
+        # Parse: "requests errors rps min_ms p1_ms p50_ms p90_ms p99_ms max_ms avg_ms"
+        read reqs errs rps minl p1 p50 p90 p99 maxl avg <<< "$result"
         
         # Accumulate totals
         total_reqs=$((total_reqs + ${reqs%.*}))
         total_errs=$((total_errs + ${errs%.*}))
         total_rps=$(awk "BEGIN {print $total_rps + $rps}")
         
-        # Format and print
+        # Format and print (order: Requests, Errors, Req/s, Min, P1, P50, P90, P99, Max, Avg)
         print_table_row "$ep_name" "$(fmt_num ${reqs%.*})" "${errs%.*}" \
             "$(printf "%.1f" "$rps")" \
-            "$(printf "%.2f" "$avg")" \
+            "$(printf "%.2f" "$minl")" \
+            "$(printf "%.2f" "$p1")" \
             "$(printf "%.2f" "$p50")" \
             "$(printf "%.2f" "$p90")" \
             "$(printf "%.2f" "$p99")" \
-            "$(printf "%.2f" "$maxl")"
+            "$(printf "%.2f" "$maxl")" \
+            "$(printf "%.2f" "$avg")"
     done
     
     print_table_footer
