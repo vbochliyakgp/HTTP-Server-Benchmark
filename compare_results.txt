@@ -1,0 +1,260 @@
+╭─vikash@vikash-lx ~/Desktop/proj/AnnandRathi  ‹main› 
+╰─➤  ./compare_endpoint.sh root  
+═══════════════════════════════════════════════════════════════════════
+ Comparing 'root' endpoint across all languages
+ Config: 100 connections, 5s duration per language
+═══════════════════════════════════════════════════════════════════════
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: js
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: JavaScript
+   Endpoints: root
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ root       │   714,689 │      0 │  142389.0 │    0.08 │    0.18 │    0.66 │    0.75 │    7.09 │  174.03 │    1.20 │
+   Server CPU:     86.20%
+   Server Memory:  62 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: py
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Python
+   Endpoints: root
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ root       │    48,933 │      2 │    9772.2 │    0.07 │    0.17 │    0.59 │    0.68 │  917.47 │ 1660.00 │   25.22 │
+   Server CPU:     83.70%
+   Server Memory:  21 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Go
+   Endpoints: root
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ root       │   750,018 │      0 │  149223.1 │    0.08 │    0.19 │    0.68 │    1.16 │    1.38 │    2.35 │    0.67 │
+   Server CPU:     85.60%
+   Server Memory:  13 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: rust
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Rust
+   Endpoints: root
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ root       │   579,040 │      0 │  115459.1 │    0.05 │    0.08 │    0.28 │    0.61 │    0.96 │   26.96 │    0.40 │
+   Server CPU:     73.50%
+   Server Memory:  2 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: cpp
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: C++
+   Endpoints: root
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ root       │   510,109 │      0 │  101756.7 │    0.06 │    0.15 │    0.53 │    0.94 │    1.38 │   11.02 │    0.57 │
+   Server CPU:     71.20%
+   Server Memory:  4 MB
+✅ Benchmark complete!
+
+═══════════════════════════════════════════════════════════════════════
+ Comparison complete!
+═══════════════════════════════════════════════════════════════════════
+╭─vikash@vikash-lx ~/Desktop/proj/AnnandRathi  ‹main› 
+╰─➤  ./compare_endpoint.sh query
+═══════════════════════════════════════════════════════════════════════
+ Comparing 'query' endpoint across all languages
+ Config: 100 connections, 5s duration per language
+═══════════════════════════════════════════════════════════════════════
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: js
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: JavaScript
+   Endpoints: query
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ query      │   628,591 │      0 │  125439.9 │    0.09 │    0.21 │    0.74 │    0.84 │    5.76 │  125.33 │    1.03 │
+   Server CPU:     85.90%
+   Server Memory:  63 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: py
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Python
+   Endpoints: query
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ query      │    39,110 │      4 │    7794.9 │    0.09 │    0.21 │    0.74 │    0.82 │  385.98 │ 1660.00 │   11.71 │
+   Server CPU:     83.00%
+   Server Memory:  21 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Go
+   Endpoints: query
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ query      │   597,778 │      0 │  119223.9 │    0.10 │    0.24 │    0.86 │    1.45 │    1.81 │    2.68 │    0.84 │
+   Server CPU:     85.70%
+   Server Memory:  13 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: rust
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Rust
+   Endpoints: query
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ query      │   493,349 │      0 │   98420.8 │    0.05 │    0.09 │    0.33 │    0.73 │    1.09 │   12.02 │    0.41 │
+   Server CPU:     77.10%
+   Server Memory:  2 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: cpp
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: C++
+   Endpoints: query
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ query      │   509,068 │      0 │  101561.4 │    0.11 │    0.26 │    0.93 │    1.01 │    1.49 │   14.93 │    0.88 │
+   Server CPU:     81.90%
+   Server Memory:  4 MB
+✅ Benchmark complete!
+
+═══════════════════════════════════════════════════════════════════════
+ Comparison complete!
+═══════════════════════════════════════════════════════════════════════
+╭─vikash@vikash-lx ~/Desktop/proj/AnnandRathi  ‹main› 
+╰─➤  ./compare_endpoint.sh json 
+═══════════════════════════════════════════════════════════════════════
+ Comparing 'json' endpoint across all languages
+ Config: 100 connections, 5s duration per language
+═══════════════════════════════════════════════════════════════════════
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: js
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: JavaScript
+   Endpoints: json
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ json       │   558,977 │      0 │  111315.5 │    0.10 │    0.23 │    0.83 │    0.95 │    7.75 │  185.21 │    1.40 │
+   Server CPU:     85.60%
+   Server Memory:  72 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: py
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Python
+   Endpoints: json
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ json       │    44,389 │      6 │    8847.7 │    0.08 │    0.18 │    0.65 │    0.73 │  769.52 │ 1790.00 │   20.72 │
+   Server CPU:     83.20%
+   Server Memory:  20 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Go
+   Endpoints: json
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ json       │   554,630 │      0 │  110617.9 │    0.11 │    0.26 │    0.93 │    1.55 │    1.95 │    4.63 │    0.90 │
+   Server CPU:     85.90%
+   Server Memory:  13 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: rust
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Rust
+   Endpoints: json
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ json       │   580,532 │      0 │  115903.2 │    0.05 │    0.08 │    0.29 │    0.63 │    0.93 │   11.77 │    0.36 │
+   Server CPU:     77.30%
+   Server Memory:  2 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: cpp
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: C++
+   Endpoints: json
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ json       │   421,965 │      0 │   84248.1 │    0.14 │    0.32 │    1.15 │    1.24 │    1.74 │   21.61 │    1.15 │
+   Server CPU:     82.50%
+   Server Memory:  4 MB
+✅ Benchmark complete!
+
+═══════════════════════════════════════════════════════════════════════
+ Comparison complete!
+═══════════════════════════════════════════════════════════════════════
+╭─vikash@vikash-lx ~/Desktop/proj/AnnandRathi  ‹main› 
+╰─➤  ./compare_endpoint.sh post
+═══════════════════════════════════════════════════════════════════════
+ Comparing 'post' endpoint across all languages
+ Config: 100 connections, 5s duration per language
+═══════════════════════════════════════════════════════════════════════
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: js
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: JavaScript
+   Endpoints: post
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ post       │   411,550 │      0 │   82083.2 │    0.13 │    0.31 │    1.11 │    1.30 │    9.73 │  203.20 │    1.84 │
+   Server CPU:     86.10%
+   Server Memory:  71 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: py
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Python
+   Endpoints: post
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ post       │    35,538 │      3 │    7085.7 │    0.10 │    0.23 │    0.82 │    0.91 │ 1010.00 │ 1670.00 │   28.56 │
+   Server CPU:     83.50%
+   Server Memory:  21 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Go
+   Endpoints: post
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ post       │   628,848 │      0 │  125603.1 │    0.10 │    0.23 │    0.82 │    1.37 │    1.71 │    4.11 │    0.80 │
+   Server CPU:     85.40%
+   Server Memory:  13 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: rust
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: Rust
+   Endpoints: post
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ post       │   540,958 │      0 │  107897.6 │    0.05 │    0.11 │    0.39 │    0.69 │    1.13 │   15.06 │    0.44 │
+   Server CPU:     71.90%
+   Server Memory:  2 MB
+✅ Benchmark complete!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Testing: cpp
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ wrk Benchmark: C++
+   Endpoints: post
+│ Endpoint   │  Requests │ Errors │   Req/s   │ Min(ms) │  P1(ms) │ P50(ms) │ P90(ms) │ P99(ms) │ Max(ms) │ Avg(ms) │
+│ post       │   531,830 │      0 │  105789.3 │    0.11 │    0.25 │    0.88 │    0.96 │    1.50 │   16.81 │    0.79 │
+   Server CPU:     80.50%
+   Server Memory:  4 MB
+✅ Benchmark complete!
+
+═══════════════════════════════════════════════════════════════════════
+ Comparison complete!
+═══════════════════════════════════════════════════════════════════════
